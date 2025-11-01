@@ -52,7 +52,7 @@ export default function HomeScreen() {
               }} />
             <View style={styles.centerAvatarWrapper}>
               <TouchableOpacity 
-                onPress={() => router.push('/(today-schedule)')}
+                onPress={() => router.push('/Home/today-schedule')}
                 activeOpacity={0.8}
               >
                 <Avatar.Image source={userImg} size={getScaledFontSize(80)} style={styles.centerAvatarImage} />
