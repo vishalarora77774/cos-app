@@ -45,6 +45,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(28)} name="person.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="today-schedule"
+        options={{
+          title: "Today's Schedule",
+          tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(28)} name="calendar" color={color} />,
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

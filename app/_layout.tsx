@@ -42,10 +42,11 @@ export default function RootLayout() {
               }} 
             />
             <Stack.Screen 
-              name="(today-schedule)" 
+              name="today-schedule" 
               options={{ 
                 title: "Today's Schedule",
                 headerShown: false,
+                autoHideHomeIndicator: true,
               }} 
             />
           </Stack>

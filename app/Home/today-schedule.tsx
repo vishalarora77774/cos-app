@@ -1,10 +1,10 @@
+import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Card, IconButton, List } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Task {
   id: number;
@@ -79,7 +79,7 @@ export default function TodayScheduleScreen() {
   const progress = (completedCount / tasks.length) * 100;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+    <AppWrapper>
       <ScrollView 
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
@@ -87,12 +87,12 @@ export default function TodayScheduleScreen() {
       >
         {/* Header with Back Button */}
         <View style={styles.header}>
-          <TouchableOpacity 
+          {/*<TouchableOpacity 
             onPress={() => router.back()}
             style={styles.backButton}
           >
             <IconButton icon="arrow-left" size={getScaledFontSize(24)} iconColor={colors.text} />
-          </TouchableOpacity>
+          </TouchableOpacity>*/}
           <Text 
             numberOfLines={2}
             style={[
@@ -265,7 +265,7 @@ export default function TodayScheduleScreen() {
           ))}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </AppWrapper>
   );
 }
 
