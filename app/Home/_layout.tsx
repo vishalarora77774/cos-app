@@ -39,6 +39,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="plan"
+        options={{
+          title: 'Plan',
+          tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(28)} name="sparkles" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
