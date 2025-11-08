@@ -1,10 +1,14 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import { generateHealthSuggestions, AISuggestion, HealthSummary } from '@/services/openai';
-import React, { useCallback, useEffect, useState } from 'react';
+import { generateHealthSuggestions, AISuggestion, HealthSummary, MedicalReport, Appointment, DoctorDiagnosis } from '@/services/openai';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Icon } from 'react-native-paper';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { HealthMetricCard } from '@/components/ui/health-metric-card';
+import { GrowthChart, DataPoint } from '@/components/ui/growth-chart';
+import { TreatmentProgress, TreatmentGoal } from '@/components/ui/treatment-progress';
 
 // Mock health data - In a real app, this would come from your API
 const getMockHealthData = (): HealthSummary => ({
@@ -15,16 +19,28 @@ const getMockHealthData = (): HealthSummary => ({
   },
   medicalReports: [
     {
-      date: '2024-11-15',
+      date: '2024-09-01',
       type: 'Blood Test',
-      summary: 'HbA1c at 6.8%, cholesterol levels within acceptable range',
-      findings: ['HbA1c: 6.8%', 'Total Cholesterol: 185 mg/dL', 'HDL: 52 mg/dL'],
+      summary: 'HbA1c at 7.2%, cholesterol levels elevated',
+      findings: ['HbA1c: 7.2%', 'Total Cholesterol: 220 mg/dL', 'HDL: 45 mg/dL'],
+    },
+    {
+      date: '2024-10-01',
+      type: 'Blood Test',
+      summary: 'HbA1c improving, cholesterol levels improving',
+      findings: ['HbA1c: 7.0%', 'Total Cholesterol: 200 mg/dL', 'HDL: 48 mg/dL'],
     },
     {
       date: '2024-11-01',
       type: 'Cardiovascular Screening',
       summary: 'Blood pressure well controlled, no concerning findings',
       findings: ['Blood Pressure: 128/78 mmHg', 'Heart Rate: 72 bpm'],
+    },
+    {
+      date: '2024-11-15',
+      type: 'Blood Test',
+      summary: 'HbA1c at 6.8%, cholesterol levels within acceptable range',
+      findings: ['HbA1c: 6.8%', 'Total Cholesterol: 185 mg/dL', 'HDL: 52 mg/dL'],
     },
   ],
   medications: [
@@ -47,7 +63,93 @@ const getMockHealthData = (): HealthSummary => ({
       purpose: 'Cardiovascular protection',
     },
   ],
+  appointments: [
+    {
+      id: '1',
+      date: '2024-11-20',
+      time: '10:00 AM',
+      type: 'Follow-up',
+      status: 'Completed',
+      doctorName: 'Dr. Sarah Johnson',
+      doctorSpecialty: 'Cardiologist',
+      diagnosis: 'Type 2 Diabetes with controlled blood pressure',
+      notes: 'Patient showing good progress with medication adherence. Blood pressure readings are stable.',
+    },
+    {
+      id: '2',
+      date: '2024-11-25',
+      time: '2:30 PM',
+      type: 'Routine Check-up',
+      status: 'Completed',
+      doctorName: 'Dr. Michael Chen',
+      doctorSpecialty: 'Endocrinologist',
+      diagnosis: 'Diabetes management - HbA1c improving',
+      notes: 'HbA1c levels have decreased from 7.2% to 6.8%. Continue current medication regimen.',
+    },
+    {
+      id: '3',
+      date: '2024-12-05',
+      time: '11:00 AM',
+      type: 'Follow-up',
+      status: 'Scheduled',
+      doctorName: 'Dr. Sarah Johnson',
+      doctorSpecialty: 'Cardiologist',
+    },
+  ],
+  doctorDiagnoses: [
+    {
+      doctorName: 'Dr. Sarah Johnson',
+      doctorSpecialty: 'Cardiologist',
+      date: '2024-11-20',
+      diagnosis: 'Type 2 Diabetes with controlled hypertension',
+      notes: 'Patient has well-controlled blood pressure with current medication. Cardiovascular risk factors are being managed effectively.',
+      treatmentRecommendations: [
+        'Continue Lisinopril 10mg daily',
+        'Maintain low-sodium diet',
+        'Regular blood pressure monitoring',
+      ],
+    },
+    {
+      doctorName: 'Dr. Michael Chen',
+      doctorSpecialty: 'Endocrinologist',
+      date: '2024-11-25',
+      diagnosis: 'Type 2 Diabetes - Well controlled',
+      notes: 'HbA1c levels showing significant improvement. Patient is responding well to Metformin therapy.',
+      treatmentRecommendations: [
+        'Continue Metformin 500mg twice daily',
+        'Monitor blood sugar levels regularly',
+        'Maintain current dietary modifications',
+      ],
+    },
+    {
+      doctorName: 'Dr. Emily Davis',
+      doctorSpecialty: 'Primary Care Physician',
+      date: '2024-10-15',
+      diagnosis: 'Overall health status - Stable',
+      notes: 'Comprehensive health assessment completed. All systems functioning within normal parameters for age.',
+      treatmentRecommendations: [
+        'Continue daily Aspirin 81mg for cardiovascular protection',
+        'Regular exercise as tolerated',
+        'Annual comprehensive health screening',
+      ],
+    },
+  ],
 });
+
+// Helper function to extract numeric value from findings
+const extractValue = (finding: string, pattern: RegExp): number | null => {
+  const match = finding.match(pattern);
+  if (match && match[1]) {
+    return parseFloat(match[1]);
+  }
+  return null;
+};
+
+// Helper function to format date for display
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 export default function PlanScreen() {
   const { settings, getScaledFontWeight, getScaledFontSize } = useAccessibility();
@@ -57,6 +159,100 @@ export default function PlanScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [healthData, setHealthData] = useState<HealthSummary | null>(null);
+
+  // Parse medical reports to extract metrics for visualization
+  const parsedMetrics = useMemo(() => {
+    if (!healthData) return null;
+
+    const reports = healthData.medicalReports;
+    
+    // Extract HbA1c values
+    const hba1cData: DataPoint[] = [];
+    reports.forEach((report) => {
+      report.findings.forEach((finding) => {
+        const value = extractValue(finding, /HbA1c:\s*([\d.]+)%/i);
+        if (value !== null) {
+          hba1cData.push({
+            label: formatDate(report.date),
+            value,
+            unit: '%',
+          });
+        }
+      });
+    });
+
+    // Extract Cholesterol values
+    const cholesterolData: DataPoint[] = [];
+    reports.forEach((report) => {
+      report.findings.forEach((finding) => {
+        const value = extractValue(finding, /Total Cholesterol:\s*([\d.]+)\s*mg\/dL/i);
+        if (value !== null) {
+          cholesterolData.push({
+            label: formatDate(report.date),
+            value,
+            unit: ' mg/dL',
+          });
+        }
+      });
+    });
+
+    // Extract HDL values
+    const hdlData: DataPoint[] = [];
+    reports.forEach((report) => {
+      report.findings.forEach((finding) => {
+        const value = extractValue(finding, /HDL:\s*([\d.]+)\s*mg\/dL/i);
+        if (value !== null) {
+          hdlData.push({
+            label: formatDate(report.date),
+            value,
+            unit: ' mg/dL',
+          });
+        }
+      });
+    });
+
+    // Extract Blood Pressure (systolic)
+    const bpData: DataPoint[] = [];
+    reports.forEach((report) => {
+      report.findings.forEach((finding) => {
+        const match = finding.match(/Blood Pressure:\s*(\d+)\/(\d+)\s*mmHg/i);
+        if (match && match[1]) {
+          bpData.push({
+            label: formatDate(report.date),
+            value: parseFloat(match[1]),
+            unit: ' mmHg',
+          });
+        }
+      });
+    });
+
+    // Get latest values for metric cards
+    const latestReport = reports[reports.length - 1];
+    const latestHbA1c = hba1cData[hba1cData.length - 1]?.value;
+    const latestCholesterol = cholesterolData[cholesterolData.length - 1]?.value;
+    const latestHDL = hdlData[hdlData.length - 1]?.value;
+    const latestBP = bpData[bpData.length - 1]?.value;
+
+    // Calculate treatment progress (mock - in real app, calculate based on actual progress)
+    const treatmentGoals: TreatmentGoal[] = healthData.treatmentPlan.goals.map((goal, index) => ({
+      goal,
+      progress: Math.min(100, (index + 1) * 30 + Math.random() * 20), // Mock progress
+      status: index === 0 ? 'on-track' : index === 1 ? 'needs-attention' : 'completed',
+    }));
+
+    return {
+      hba1cData: hba1cData.sort((a, b) => new Date(a.label).getTime() - new Date(b.label).getTime()),
+      cholesterolData: cholesterolData.sort((a, b) => new Date(a.label).getTime() - new Date(b.label).getTime()),
+      hdlData: hdlData.sort((a, b) => new Date(a.label).getTime() - new Date(b.label).getTime()),
+      bpData: bpData.sort((a, b) => new Date(a.label).getTime() - new Date(b.label).getTime()),
+      latestHbA1c,
+      latestCholesterol,
+      latestHDL,
+      latestBP,
+      treatmentGoals,
+    };
+  }, [healthData]);
 
   const loadAISuggestions = useCallback(async (isRefresh = false) => {
     try {
@@ -69,10 +265,11 @@ export default function PlanScreen() {
         setIsLoading(true);
       }
       setError(null);
-      const healthData = getMockHealthData();
+      const mockHealthData = getMockHealthData();
+      setHealthData(mockHealthData);
       console.log('Calling generateHealthSuggestions with isRefresh:', isRefresh);
       // Pass isRefresh flag to get fresh, varied responses on each refresh
-      const suggestion = await generateHealthSuggestions(healthData, isRefresh);
+      const suggestion = await generateHealthSuggestions(mockHealthData, isRefresh);
       console.log('Received suggestion from OpenAI:', suggestion);
       // Replace content with fresh AI-generated response
       setAiSuggestion(suggestion);
@@ -100,34 +297,28 @@ export default function PlanScreen() {
   }, [loadAISuggestions]);
 
   return (
-      <ScrollView 
-        style={[styles.container, { backgroundColor: colors.background }]} 
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.tint}
-            colors={[colors.tint]}
-          />
-        }
-      >
+      <View style={styles.screenContainer}>
+        <ScrollView 
+          style={[styles.container, { backgroundColor: colors.background }]} 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.tint}
+              colors={[colors.tint]}
+            />
+          }
+        >
         {/* AI Health Summary Section - Senior-Friendly Design */}
         <View style={[styles.aiSection, { 
           backgroundColor: settings.isDarkTheme ? '#1a1a1a' : '#ffffff',
         }]}>
+          <View style={styles.aiSectionContent}>
           <View style={styles.aiHeader}>
               <View style={[styles.iconContainer, { backgroundColor: settings.isDarkTheme ? '#2a2a2a' : '#e8f4f8' }]}>
                 <IconSymbol name="sparkles" size={getScaledFontSize(40)} color={colors.tint} />
-                {isRefreshing && (
-                  <View style={[
-                    styles.refreshIndicatorOverlay,
-                    { backgroundColor: settings.isDarkTheme ? '#1a1a1a' : '#ffffff' }
-                  ]}>
-                    <ActivityIndicator size="small" color={colors.tint} />
-                  </View>
-                )}
               </View>
               <View style={styles.headerTextContainer}>
                 <Text style={[
@@ -149,36 +340,10 @@ export default function PlanScreen() {
                     marginTop: getScaledFontSize(4),
                   }
                 ]}>
-                  {isRefreshing ? 'Updating your health summary...' : 'AI-powered insights based on your treatment plan'}
+                  AI-powered insights based on your treatment plan
                 </Text>
               </View>
             </View>
-
-            {/* Refresh Loading Indicator */}
-            {isRefreshing && aiSuggestion && (
-              <View style={[
-                styles.refreshLoadingContainer,
-                {
-                  backgroundColor: settings.isDarkTheme ? '#252525' : '#f5f5f5',
-                  paddingVertical: getScaledFontSize(12),
-                  marginBottom: getScaledFontSize(8),
-                  marginTop: getScaledFontSize(8),
-                }
-              ]}>
-                <ActivityIndicator size="small" color={colors.tint} />
-                <Text style={[
-                  styles.refreshLoadingText,
-                  {
-                    color: colors.text,
-                    fontSize: getScaledFontSize(16),
-                    fontWeight: getScaledFontWeight(500) as any,
-                    marginLeft: getScaledFontSize(8),
-                  }
-                ]}>
-                  Refreshing...
-                </Text>
-              </View>
-            )}
 
             {isLoading && !isRefreshing ? (
               <View style={styles.loadingContainer}>
@@ -255,7 +420,10 @@ export default function PlanScreen() {
                 </Button>
               </View>
             ) : aiSuggestion ? (
-              <View style={styles.suggestionsContainer}>
+              <View style={[
+                styles.suggestionsContainer,
+                isRefreshing && styles.contentBehindOverlay
+              ]}>
                 {/* Summary Section */}
                 <View style={[styles.suggestionBlock, styles.summaryBlock]}>
                   <View style={styles.blockHeader}>
@@ -398,6 +566,165 @@ export default function PlanScreen() {
                   </View>
                 )}
 
+                {/* Treatment Progress Section */}
+                {healthData && parsedMetrics && (
+                  <View style={styles.suggestionBlock}>
+                    <TreatmentProgress
+                      planTitle={healthData.treatmentPlan.plan}
+                      duration={healthData.treatmentPlan.duration}
+                      overallProgress={65}
+                      goals={parsedMetrics.treatmentGoals}
+                    />
+                  </View>
+                )}
+
+                {/* Health Metrics Cards Section */}
+                {healthData && parsedMetrics && (
+                  <View style={styles.suggestionBlock}>
+                    <View style={styles.blockHeader}>
+                      <View style={[styles.blockIconContainer, { backgroundColor: settings.isDarkTheme ? '#1a2e1a' : '#e8f5e9' }]}>
+                        <Icon source="chart-line" size={getScaledFontSize(32)} color="#4caf50" />
+                      </View>
+                      <Text style={[
+                        styles.blockTitle,
+                        {
+                          color: colors.text,
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          marginLeft: getScaledFontSize(12),
+                        }
+                      ]}>
+                        Key Health Metrics
+                      </Text>
+                    </View>
+                    <View style={styles.metricsGrid}>
+                      {parsedMetrics.latestHbA1c !== undefined && (
+                        <HealthMetricCard
+                          title="HbA1c"
+                          value={parsedMetrics.latestHbA1c.toFixed(1)}
+                          unit="%"
+                          status={parsedMetrics.latestHbA1c < 7 ? 'good' : parsedMetrics.latestHbA1c < 8 ? 'warning' : 'critical'}
+                          icon="water"
+                          trend={parsedMetrics.hba1cData.length > 1 ? 
+                            `Trend: ${parsedMetrics.hba1cData[parsedMetrics.hba1cData.length - 1].value < parsedMetrics.hba1cData[0].value ? '↓ Improving' : '↑ Needs attention'}` : 
+                            undefined}
+                          target="< 7.0%"
+                        />
+                      )}
+                      {parsedMetrics.latestCholesterol !== undefined && (
+                        <HealthMetricCard
+                          title="Total Cholesterol"
+                          value={parsedMetrics.latestCholesterol.toString()}
+                          unit="mg/dL"
+                          status={parsedMetrics.latestCholesterol < 200 ? 'good' : parsedMetrics.latestCholesterol < 240 ? 'warning' : 'critical'}
+                          icon="favorite"
+                          trend={parsedMetrics.cholesterolData.length > 1 ? 
+                            `Trend: ${parsedMetrics.cholesterolData[parsedMetrics.cholesterolData.length - 1].value < parsedMetrics.cholesterolData[0].value ? '↓ Improving' : '↑ Needs attention'}` : 
+                            undefined}
+                          target="< 200 mg/dL"
+                        />
+                      )}
+                      {parsedMetrics.latestHDL !== undefined && (
+                        <HealthMetricCard
+                          title="HDL Cholesterol"
+                          value={parsedMetrics.latestHDL.toString()}
+                          unit="mg/dL"
+                          status={parsedMetrics.latestHDL >= 60 ? 'good' : parsedMetrics.latestHDL >= 40 ? 'normal' : 'warning'}
+                          icon="favorite-border"
+                          trend={parsedMetrics.hdlData.length > 1 ? 
+                            `Trend: ${parsedMetrics.hdlData[parsedMetrics.hdlData.length - 1].value > parsedMetrics.hdlData[0].value ? '↑ Improving' : '↓ Needs attention'}` : 
+                            undefined}
+                          target="> 60 mg/dL"
+                        />
+                      )}
+                      {parsedMetrics.latestBP !== undefined && (
+                        <HealthMetricCard
+                          title="Blood Pressure"
+                          value={parsedMetrics.latestBP.toString()}
+                          unit="mmHg"
+                          status={parsedMetrics.latestBP < 120 ? 'good' : parsedMetrics.latestBP < 130 ? 'normal' : 'warning'}
+                          icon="favorite"
+                          target="< 120 mmHg"
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* Growth Charts Section */}
+                {healthData && parsedMetrics && (
+                  <View style={styles.suggestionBlock}>
+                    <View style={styles.blockHeader}>
+                      <View style={[styles.blockIconContainer, { backgroundColor: settings.isDarkTheme ? '#1a1a2e' : '#e3f2fd' }]}>
+                        <Icon source="chart-bar" size={getScaledFontSize(32)} color={colors.tint} />
+                      </View>
+                      <Text style={[
+                        styles.blockTitle,
+                        {
+                          color: colors.text,
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          marginLeft: getScaledFontSize(12),
+                        }
+                      ]}>
+                        Health Trends
+                      </Text>
+                    </View>
+                    {parsedMetrics.hba1cData.length > 1 && (
+                      <View style={styles.chartContainer}>
+                        <GrowthChart
+                          title="HbA1c Trend"
+                          data={parsedMetrics.hba1cData}
+                          unit="%"
+                          type="line"
+                          color="#0a7ea4"
+                          minValue={6}
+                          maxValue={8}
+                        />
+                      </View>
+                    )}
+                    {parsedMetrics.cholesterolData.length > 1 && (
+                      <View style={styles.chartContainer}>
+                        <GrowthChart
+                          title="Total Cholesterol Trend"
+                          data={parsedMetrics.cholesterolData}
+                          unit=" mg/dL"
+                          type="line"
+                          color="#ff9800"
+                          minValue={150}
+                          maxValue={250}
+                        />
+                      </View>
+                    )}
+                    {parsedMetrics.hdlData.length > 1 && (
+                      <View style={styles.chartContainer}>
+                        <GrowthChart
+                          title="HDL Cholesterol Trend"
+                          data={parsedMetrics.hdlData}
+                          unit=" mg/dL"
+                          type="bar"
+                          color="#4caf50"
+                          minValue={30}
+                          maxValue={70}
+                        />
+                      </View>
+                    )}
+                    {parsedMetrics.bpData.length > 1 && (
+                      <View style={styles.chartContainer}>
+                        <GrowthChart
+                          title="Blood Pressure Trend"
+                          data={parsedMetrics.bpData}
+                          unit=" mmHg"
+                          type="line"
+                          color="#ff4444"
+                          minValue={100}
+                          maxValue={140}
+                        />
+                      </View>
+                    )}
+                  </View>
+                )}
+
                 {/* Warnings Section */}
                 {aiSuggestion.warnings.length > 0 && (
                   <View style={[styles.suggestionBlock, styles.warningBlock, {
@@ -451,12 +778,42 @@ export default function PlanScreen() {
                 )}
               </View>
             ) : null}
+
+          </View>
         </View>
       </ScrollView>
+
+      {/* Full Screen Refresh Overlay */}
+      {isRefreshing && aiSuggestion && (
+        <View style={[
+          styles.fullScreenOverlay,
+          {
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          }
+        ]}>
+          <ActivityIndicator size="large" color={colors.tint} />
+          <Text style={[
+            styles.overlayText,
+            {
+              color: '#ffffff',
+              fontSize: getScaledFontSize(20),
+              fontWeight: getScaledFontWeight(500) as any,
+              marginTop: getScaledFontSize(20),
+            }
+          ]}>
+            Analyze your health info
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    position: 'relative',
+  },
   container: {
     flex: 1,
   },
@@ -464,6 +821,16 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     flexGrow: 1,
+  },
+  visualizationSection: {
+    marginBottom: 24,
+    padding: 24,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    borderRadius: 24,
   },
   aiSection: {
     marginBottom: 24,
@@ -474,6 +841,19 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     borderRadius: 24,
+    position: 'relative',
+  },
+  aiSectionContent: {
+    position: 'relative',
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  metricsGrid: {
+    gap: 16,
+  },
+  chartContainer: {
+    marginBottom: 24,
   },
   aiHeader: {
     flexDirection: 'row',
@@ -559,6 +939,22 @@ const styles = StyleSheet.create({
   },
   suggestionsContainer: {
     gap: 28,
+  },
+  contentBehindOverlay: {
+    opacity: 0.3,
+  },
+  fullScreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  overlayText: {
+    textAlign: 'center',
   },
   suggestionBlock: {
     marginBottom: 8,
