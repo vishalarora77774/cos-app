@@ -26,50 +26,57 @@ export function DoctorCard({
 }: DoctorCardProps) {
   const { getScaledFontSize, getScaledFontWeight } = useAccessibility();
 
+  const dynamicPadding = getScaledFontSize(16);
+  const avatarSize = getScaledFontSize(48);
+  const cardMargin = getScaledFontSize(12);
+
   return (
-    <Card style={styles.card} onPress={onPress}>
-      <Card.Title
-        title={
-          <Text style={[
-            styles.title,
-            {
-              paddingLeft: getScaledFontSize(16),
-              fontSize: getScaledFontSize(16),
-              fontWeight: getScaledFontWeight(600) as any,
-            }
-          ]}>
-            {name}
-          </Text>
-        }
-        subtitle={
-          <Text style={[
-            styles.subtitle,
-            {
-              paddingLeft: getScaledFontSize(16),
-              fontSize: getScaledFontSize(12),
-              fontWeight: getScaledFontWeight(500) as any,
-            }
-          ]}>
-            {qualifications}
-          </Text>
-        }
-        left={() => (
+    <Card style={[styles.card, { marginBottom: cardMargin }]} onPress={onPress}>
+      <Card.Content style={[styles.cardContent, { padding: dynamicPadding }]}>
+        <View style={styles.contentRow}>
           <Avatar.Image
-            size={getScaledFontSize(48)}
+            size={avatarSize}
             source={image}
-            style={styles.avatar}
+            style={[styles.avatar, { marginRight: dynamicPadding }]}
           />
-        )}
-        right={() => showSwitch ? (
-          <View style={styles.switchContainer}>
-            <Switch
-              value={switchValue}
-              onValueChange={onSwitchChange}
-              color="#4CAF50"
-            />
+          <View style={styles.textContainer}>
+            <Text 
+              style={[
+                styles.title,
+                {
+                  fontSize: getScaledFontSize(16),
+                  fontWeight: getScaledFontWeight(600) as any,
+                  marginBottom: getScaledFontSize(4),
+                }
+              ]}
+              numberOfLines={2}
+            >
+              {name}
+            </Text>
+            <Text 
+              style={[
+                styles.subtitle,
+                {
+                  fontSize: getScaledFontSize(12),
+                  fontWeight: getScaledFontWeight(500) as any,
+                }
+              ]}
+              numberOfLines={2}
+            >
+              {qualifications}
+            </Text>
           </View>
-        ) : null}
-      />
+          {showSwitch && (
+            <View style={[styles.switchContainer, { paddingLeft: dynamicPadding }]}>
+              <Switch
+                value={switchValue}
+                onValueChange={onSwitchChange}
+                color="#4CAF50"
+              />
+            </View>
+          )}
+        </View>
+      </Card.Content>
     </Card>
   );
 }
@@ -77,10 +84,23 @@ export function DoctorCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
-    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  cardContent: {
+    padding: 16,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   avatar: {
     backgroundColor: 'transparent',
+  },
+  textContainer: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   title: {
     // Styles will be applied via inline styles for accessibility
@@ -91,6 +111,6 @@ const styles = StyleSheet.create({
   switchContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingRight: 16,
+    flexShrink: 0,
   },
 });
