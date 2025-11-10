@@ -23,7 +23,7 @@ export default function DoctorDetailScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const tabs = [
-    { id: 'treatment', label: 'Treatment Plan' },
+    { id: 'treatment', label: 'Treatment Diagnosis Plan' },
     { id: 'share', label: 'Share Data' },
     { id: 'appointments', label: 'Appointments' },
   ];
@@ -47,17 +47,19 @@ export default function DoctorDetailScreen() {
   const treatmentPlans = [
     {
       id: 1,
-      title: 'Current Treatment Plan',
+      title: 'Current Treatment Diagnosis Plan',
       status: 'Active',
       date: 'Started Nov 15, 2024',
+      diagnosis: 'Chronic lower back pain with muscle tension and limited range of motion',
       description: 'Physical therapy for lower back pain with weekly sessions',
       medications: ['Ibuprofen 400mg', 'Muscle relaxant'],
     },
     {
       id: 2,
-      title: 'Previous Treatment Plan',
+      title: 'Previous Treatment Diagnosis Plan',
       status: 'Completed',
       date: 'Aug 10 - Nov 14, 2024',
+      diagnosis: 'Acute lower back pain with suspected disc involvement',
       description: 'Initial assessment and pain management',
       medications: ['Acetaminophen 500mg'],
     },
@@ -106,7 +108,14 @@ export default function DoctorDetailScreen() {
               </View>
             </View>
             <Text style={[styles.planDate, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.date}</Text>
-            <Text style={styles.planDescription}>{plan.description}</Text>
+            <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
+              <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Diagnosis:</Text>
+              <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.diagnosis}</Text>
+            </View>
+            <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
+              <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Treatment Recommendations:</Text>
+              <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.description}</Text>
+            </View>
             <Text style={[styles.medicationsTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Medications:</Text>
             {plan.medications.map((med, idx) => (
               <Text key={idx} style={[styles.medication, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>• {med}</Text>
@@ -293,6 +302,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 8,
+  },
+  diagnosisContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+    width: '100%',
+  },
+  diagnosisTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  diagnosis: {
+    fontSize: 14,
+    color: '#666',
   },
   planDescription: {
     fontSize: 16,
