@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import { Dimensions } from 'react-native';
 
 interface AccessibilitySettings {
   fontSizeScale: number; // Percentage scale (100 = 100%, 150 = 150%, etc.)
@@ -30,6 +31,17 @@ const AccessibilityContext = createContext<AccessibilityContextType | undefined>
 
 const STORAGE_KEY = 'accessibility_settings';
 
+// Helper function to detect if device is a tablet/iPad
+const isTablet = () => {
+  const { width } = Dimensions.get('window');
+  return width >= 768; // iPad starts at 768px width
+};
+
+// Get the maximum font size limit based on device type
+const getMaxFontSizeLimit = () => {
+  return isTablet() ? 200 : 150; // 200% for tablets/iPads, 150% for phones
+};
+
 export function AccessibilityProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AccessibilitySettings>(defaultSettings);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +63,17 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
       const storedSettings = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedSettings) {
         const parsedSettings = JSON.parse(storedSettings);
-        setSettings({ ...defaultSettings, ...parsedSettings });
+        const maxLimit = getMaxFontSizeLimit();
+        // Clamp fontSizeScale to the current device's limit
+        const clampedFontSizeScale = Math.min(
+          Math.max(parsedSettings.fontSizeScale || defaultSettings.fontSizeScale, 50),
+          maxLimit
+        );
+        setSettings({ 
+          ...defaultSettings, 
+          ...parsedSettings,
+          fontSizeScale: clampedFontSizeScale
+        });
       }
     } catch (error) {
       console.error('Error loading accessibility settings:', error);
@@ -69,13 +91,15 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   };
 
   const updateFontScale = (scale: number) => {
-    setSettings(prev => ({ ...prev, fontSizeScale: Math.max(50, Math.min(150, scale)) }));
+    const maxLimit = getMaxFontSizeLimit();
+    setSettings(prev => ({ ...prev, fontSizeScale: Math.max(50, Math.min(maxLimit, scale)) }));
   };
 
   const increaseFontSize = () => {
+    const maxLimit = getMaxFontSizeLimit();
     setSettings(prev => ({ 
       ...prev, 
-      fontSizeScale: Math.min(prev.fontSizeScale + 10, 150) 
+      fontSizeScale: Math.min(prev.fontSizeScale + 10, maxLimit) 
     }));
   };
 

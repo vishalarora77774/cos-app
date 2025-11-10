@@ -33,7 +33,7 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
   // Original fixed values
   const containerWidth = 384;
   const containerHeight = 320;
-  const radius = 144 * 1.1; // 158.4
+  const radius = 144 * 1.2; // 158.4
   const centerAvatarSize = 80;
   const orbitAvatarSize = 48;
   const orbitAvatarContainerSize = 120;
@@ -49,14 +49,14 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
       <View
         style={{
           position: 'absolute',
-          width: 316.8, // diameter = 2 * radius (radius is 144 * 1.1 = 158.4)
-          height: 316.8,
-          borderRadius: 158.4,
+          width: radius * 2, // diameter = 2 * radius (radius is 144 * 1.2 = 172.8)
+          height: radius * 2,
+          borderRadius: radius,
           borderWidth: 2,
           borderColor: '#e0e0e0',
           borderStyle: 'dashed',
-          left: (containerWidth - 316.8) / 2,
-          top: (containerHeight - 316.8) / 2,
+          left: (containerWidth - radius * 2) / 2,
+          top: (containerHeight - radius * 2) / 2,
           zIndex: 0,
         }} />
       <View style={styles.centerAvatarWrapper}>
@@ -144,7 +144,7 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
   // Get screen dimensions and calculate scale factor
   const screenWidth = Dimensions.get('window').width;
   // Horizontal padding from circleSection (24 on each side = 48 total)
-  const horizontalPadding = 48;
+  const horizontalPadding = 24;
   // Maximum available width for the circle container
   const maxAvailableWidth = screenWidth - horizontalPadding;
   
@@ -159,21 +159,39 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
   // Avatar container size - scale proportionally
   const baseAvatarContainerSize = 120;
   const avatarContainerSize = baseAvatarContainerSize * Math.min(scaleFactor, 1.5);
-  const containerPadding = 40;
+  const containerPadding = 1;
   
   // Calculate maximum radius that fits within available width
-  const maxRadius = (maxAvailableWidth - avatarContainerSize - (containerPadding * 2)) / 2;
+  // Increased containerPadding to allow more space between center and orbiting circles
+  const adjustedContainerPadding = containerPadding * 1.5;
+  const maxRadius = (maxAvailableWidth - avatarContainerSize - (adjustedContainerPadding * 2)) / 2;
   
-  // Scale radius more aggressively for larger screens
-  const desiredRadius = baseRadius * scaleFactor * 1.2;
-  const radius = Math.min(desiredRadius, maxRadius);
+  // Avatar sizes - scale less aggressively than the circle (calculate early for radius calculation)
+  const centerAvatarSize = 80 * Math.min(scaleFactor, 1.5);
+  
+  // Adaptive multiplier based on screen width - larger screens get more spacing
+  // 11-inch iPad: ~834px width, 13-inch iPad: ~1024px width
+  // Use a progressive multiplier that scales with screen size
+  const screenWidthRatio = screenWidth / 834; // Normalize to 11-inch iPad
+  const adaptiveMultiplier = Math.min(2.5 + (screenWidthRatio - 1) * 0.1, 2.592); // Range from 2.5 to 2.592
+  
+  // Calculate minimum radius to prevent overlapping with center avatar
+  // Need enough space for center avatar + orbiting avatar + padding
+  const maxContainerSize = Math.max(...doctors.map(d => d.role === 'care_manager' ? avatarContainerSize * 1.35 : avatarContainerSize));
+  const minRadiusFromCenter = (centerAvatarSize / 2) + (maxContainerSize / 2) + 80; // 80px padding between center and orbit
+  
+  // Calculate minimum radius to prevent overlapping between orbiting doctors
+  // Each doctor needs space around the circle: we need enough circumference for all doctors
+  const minRadiusForSpacing = (maxContainerSize * doctors.length * 1.5) / (2 * Math.PI);
+  
+  // Scale radius more aggressively for larger screens - increased multiplier for more spacing
+  const desiredRadius = baseRadius * scaleFactor * adaptiveMultiplier;
+  // Use the larger of: desired radius, minimum from center, or minimum for spacing
+  const radius = Math.min(Math.max(desiredRadius, minRadiusFromCenter, minRadiusForSpacing), maxRadius);
   
   // Calculate container size based on actual radius
-  const containerWidth = (radius * 2) + avatarContainerSize + (containerPadding * 2);
+  const containerWidth = (radius * 2) + avatarContainerSize + (adjustedContainerPadding * 2);
   const containerHeight = containerWidth; // Keep it square
-  
-  // Avatar sizes - scale less aggressively than the circle
-  const centerAvatarSize = 80 * Math.min(scaleFactor, 1.5);
   const orbitAvatarSize = 48 * Math.min(scaleFactor, 1.5);
   const orbitAvatarContainerSize = avatarContainerSize;
   const linkLineWidth = 92 * Math.min(scaleFactor, 1.5);
@@ -247,7 +265,8 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
                   zIndex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: containerSize,
+                  minWidth: containerSize,
+                  paddingHorizontal: 4,
                   height: containerSize,
                 },
               ]}
@@ -257,15 +276,13 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
                 size={getScaledFontSize(avatarSize)}
                 source={userImg} />
               <Text 
-                numberOfLines={2}
                 style={[
                   styles.orbitAvatarText,
                   {
                     fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)),
                     fontWeight: getScaledFontWeight(500) as any,
                     color: colors.text,
-                    width: 90 * Math.min(scaleFactor, 1.5),
-                    textAlign: 'center'
+                    textAlign: 'center',
                   }
                 ]}>
                 Kendrick L.
@@ -282,7 +299,8 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
 const generateDoctors = (isTablet: boolean): Doctor[] => {
   // Determine count range based on device type
   const minCount = 5;
-  const maxCount = isTablet ? 11 : 8;
+  // Limit to 8 for both phones and iPad/tablets
+  const maxCount = 8;
   
   // Generate random count within range
   const count = Math.floor(Math.random() * (maxCount - minCount + 1)) + minCount;
@@ -513,6 +531,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    paddingTop: 20,
   },
   appointmentsSection: {
     width: '100%',
