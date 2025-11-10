@@ -4,14 +4,273 @@ import { useAccessibility } from '@/stores/accessibility-store';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Button, Card, List } from 'react-native-paper';
+
+// Helper function to detect if device is a tablet
+const isTablet = () => {
+  const { width } = Dimensions.get('window');
+  return width >= 768; // iPad starts at 768px width
+};
+
+interface CircleViewProps {
+  doctors: Array<{ key: number }>;
+  userImg: any;
+  colors: any;
+  getScaledFontSize: (size: number) => number;
+  getScaledFontWeight: (weight: number) => string | number;
+}
+
+// Original Circle View for iPhone/Android (fixed dimensions)
+function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight }: CircleViewProps) {
+  // Original fixed values
+  const containerWidth = 384;
+  const containerHeight = 320;
+  const radius = 144 * 1.1; // 158.4
+  const centerAvatarSize = 80;
+  const orbitAvatarSize = 48;
+  const orbitAvatarContainerSize = 120;
+  const linkLineWidth = 92;
+
+  return (
+    <View style={[styles.circleContainer, { width: containerWidth, height: containerHeight, alignItems: 'center', justifyContent: 'center' }]}>
+      <Image
+        source={require('@/assets/images/backgroud.png')}
+        style={styles.background}
+        contentFit='contain' />
+      {/* Circular line connecting the orbiting avatars */}
+      <View
+        style={{
+          position: 'absolute',
+          width: 316.8, // diameter = 2 * radius (radius is 144 * 1.1 = 158.4)
+          height: 316.8,
+          borderRadius: 158.4,
+          borderWidth: 2,
+          borderColor: '#e0e0e0',
+          borderStyle: 'dashed',
+          left: (containerWidth - 316.8) / 2,
+          top: (containerHeight - 316.8) / 2,
+          zIndex: 0,
+        }} />
+      <View style={styles.centerAvatarWrapper}>
+        <TouchableOpacity 
+          onPress={() => router.push('/Home/today-schedule')}
+          activeOpacity={0.8}
+        >
+          <Avatar.Image source={userImg} size={getScaledFontSize(centerAvatarSize)} style={styles.centerAvatarImage} />
+        </TouchableOpacity>
+        <Text style={[
+          styles.centerAvatarText,
+          {
+            fontSize: getScaledFontSize(16),
+            fontWeight: getScaledFontWeight(600) as any,
+            color: colors.text,
+          }
+        ]}>Jenny Wilson</Text>
+      </View>
+      <Button mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
+        More
+      </Button>
+      {doctors.map((u, idx) => {
+        const angle = (idx / doctors.length) * 2 * Math.PI;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        return (
+          <React.Fragment key={`doctor-${u.key}`}>
+            <View
+              style={[
+                styles.linkLine,
+                {
+                  width: linkLineWidth,
+                  transform: [
+                    { rotate: `${(angle * 180) / Math.PI}deg` },
+                  ],
+                },
+              ]} />
+            <TouchableOpacity
+              style={[
+                styles.orbitAvatar,
+                {
+                  position: 'absolute',
+                  left: containerWidth / 2 + x - 60, // 60 = half of expanded width (120)
+                  top: containerHeight / 2 + y - 60, // 60 = half of expanded height (120)
+                  zIndex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: orbitAvatarContainerSize,
+                  height: orbitAvatarContainerSize,
+                },
+              ]}
+              onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
+            >
+              <Avatar.Image
+                size={getScaledFontSize(orbitAvatarSize)}
+                source={userImg} />
+              <Text 
+                numberOfLines={2}
+                style={[
+                  styles.orbitAvatarText,
+                  {
+                    fontSize: getScaledFontSize(12),
+                    fontWeight: getScaledFontWeight(500) as any,
+                    color: colors.text,
+                    width: 90,
+                    textAlign: 'center'
+                  }
+                ]}>
+                Kendrick L.
+              </Text>
+            </TouchableOpacity>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+// Responsive Circle View for iPad/Tablet
+function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight }: CircleViewProps) {
+  // Get screen dimensions and calculate scale factor
+  const screenWidth = Dimensions.get('window').width;
+  // Horizontal padding from circleSection (24 on each side = 48 total)
+  const horizontalPadding = 48;
+  // Maximum available width for the circle container
+  const maxAvailableWidth = screenWidth - horizontalPadding;
+  
+  // Base width for iPhone (375 is typical iPhone width)
+  const baseWidth = 375;
+  // Calculate scale factor, but cap it for very large screens (max 2.2x for iPad)
+  const scaleFactor = Math.min(screenWidth / baseWidth, 2.2);
+  
+  // Base radius for orbit - original design value
+  const baseRadius = 144 * 1.1; // ~158.4
+  
+  // Avatar container size - scale proportionally
+  const baseAvatarContainerSize = 120;
+  const avatarContainerSize = baseAvatarContainerSize * Math.min(scaleFactor, 1.5);
+  const containerPadding = 40;
+  
+  // Calculate maximum radius that fits within available width
+  const maxRadius = (maxAvailableWidth - avatarContainerSize - (containerPadding * 2)) / 2;
+  
+  // Scale radius more aggressively for larger screens
+  const desiredRadius = baseRadius * scaleFactor * 1.2;
+  const radius = Math.min(desiredRadius, maxRadius);
+  
+  // Calculate container size based on actual radius
+  const containerWidth = (radius * 2) + avatarContainerSize + (containerPadding * 2);
+  const containerHeight = containerWidth; // Keep it square
+  
+  // Avatar sizes - scale less aggressively than the circle
+  const centerAvatarSize = 80 * Math.min(scaleFactor, 1.5);
+  const orbitAvatarSize = 48 * Math.min(scaleFactor, 1.5);
+  const orbitAvatarContainerSize = avatarContainerSize;
+  const linkLineWidth = 92 * Math.min(scaleFactor, 1.5);
+
+  return (
+    <View style={[styles.circleContainer, { width: containerWidth, height: containerHeight, alignItems: 'center', justifyContent: 'center' }]}>
+      <Image
+        source={require('@/assets/images/backgroud.png')}
+        style={styles.background}
+        contentFit='contain' />
+      {/* Circular line connecting the orbiting avatars */}
+      <View
+        style={{
+          position: 'absolute',
+          width: radius * 2, // diameter = 2 * radius
+          height: radius * 2,
+          borderRadius: radius,
+          borderWidth: 2,
+          borderColor: '#e0e0e0',
+          borderStyle: 'dashed',
+          left: (containerWidth - radius * 2) / 2,
+          top: (containerHeight - radius * 2) / 2,
+          zIndex: 0,
+        }} />
+      <View style={styles.centerAvatarWrapper}>
+        <TouchableOpacity 
+          onPress={() => router.push('/Home/today-schedule')}
+          activeOpacity={0.8}
+        >
+          <Avatar.Image source={userImg} size={getScaledFontSize(centerAvatarSize)} style={styles.centerAvatarImage} />
+        </TouchableOpacity>
+        <Text style={[
+          styles.centerAvatarText,
+          {
+            fontSize: getScaledFontSize(16 * Math.min(scaleFactor, 1.5)),
+            fontWeight: getScaledFontWeight(600) as any,
+            color: colors.text,
+          }
+        ]}>Jenny Wilson</Text>
+      </View>
+      <Button mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
+        More
+      </Button>
+      {doctors.map((u, idx) => {
+        const angle = (idx / doctors.length) * 2 * Math.PI;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        const halfContainerSize = orbitAvatarContainerSize / 2;
+        return (
+          <React.Fragment key={`doctor-${u.key}`}>
+            <View
+              style={[
+                styles.linkLine,
+                {
+                  width: linkLineWidth,
+                  transform: [
+                    { rotate: `${(angle * 180) / Math.PI}deg` },
+                  ],
+                },
+              ]} />
+            <TouchableOpacity
+              style={[
+                styles.orbitAvatar,
+                {
+                  position: 'absolute',
+                  left: containerWidth / 2 + x - halfContainerSize,
+                  top: containerHeight / 2 + y - halfContainerSize,
+                  zIndex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: orbitAvatarContainerSize,
+                  height: orbitAvatarContainerSize,
+                },
+              ]}
+              onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
+            >
+              <Avatar.Image
+                size={getScaledFontSize(orbitAvatarSize)}
+                source={userImg} />
+              <Text 
+                numberOfLines={2}
+                style={[
+                  styles.orbitAvatarText,
+                  {
+                    fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)),
+                    fontWeight: getScaledFontWeight(500) as any,
+                    color: colors.text,
+                    width: 90 * Math.min(scaleFactor, 1.5),
+                    textAlign: 'center'
+                  }
+                ]}>
+                Kendrick L.
+              </Text>
+            </TouchableOpacity>
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const { getScaledFontSize, settings, getScaledFontWeight } = useAccessibility();
   const userImg = require('@/assets/images/dummy.jpg');
   const doctors = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ key: i }));
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  
+  const isTabletDevice = isTablet();
   return (
     <AppWrapper notificationCount={3}>
       <ScrollView 
@@ -31,100 +290,23 @@ export default function HomeScreen() {
           ]}>
             Jenny's Circle of Support
           </Text>
-          <View style={[styles.circleContainer, { width: 384, height: 320, alignItems: 'center', justifyContent: 'center' }]}>
-            <Image
-              source={require('@/assets/images/backgroud.png')}
-              style={styles.background}
-              contentFit='contain' />
-            {/* Circular line connecting the orbiting avatars */}
-            <View
-              style={{
-                position: 'absolute',
-                width: 316.8, // diameter = 2 * radius (radius is 144 * 1.1 = 158.4)
-                height: 316.8,
-                borderRadius: 158.4,
-                borderWidth: 2,
-                borderColor: '#e0e0e0',
-                borderStyle: 'dashed',
-                left: (384 - 316.8) / 2,
-                top: (320 - 316.8) / 2,
-                zIndex: 0,
-              }} />
-            <View style={styles.centerAvatarWrapper}>
-              <TouchableOpacity 
-                onPress={() => router.push('/Home/today-schedule')}
-                activeOpacity={0.8}
-              >
-                <Avatar.Image source={userImg} size={getScaledFontSize(80)} style={styles.centerAvatarImage} />
-              </TouchableOpacity>
-              <Text style={[
-                styles.centerAvatarText,
-                {
-                  fontSize: getScaledFontSize(16),
-                  fontWeight: getScaledFontWeight(600) as any,
-                  color: colors.text,
-                }
-              ]}>Jenny Wilson</Text>
-            </View>
-            <Button mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
-              More
-            </Button>
-            {doctors.map((u, idx) => {
-              const angle = (idx / doctors.length) * 2 * Math.PI;
-              const radius = 144 * 1.1;
-              const x = Math.cos(angle) * radius;
-              const y = Math.sin(angle) * radius;
-              // Determine if this avatar is at an edge position (right, top, left, or bottom)
-              const isAtEdge = idx === 0 || idx === 2 || idx === 4 || idx === 6;
-              return (
-                <React.Fragment key={`doctor-${u.key}`}>
-                  <View
-                    style={[
-                      styles.linkLine,
-                      {
-                        transform: [
-                          { rotate: `${(angle * 180) / Math.PI}deg` },
-                        ],
-                      },
-                    ]} />
-                  <TouchableOpacity
-                    style={[
-                      styles.orbitAvatar,
-                      {
-                        position: 'absolute',
-                        left: 384 / 2 + x - 60, // 60 = half of expanded width (120)
-                        top: 320 / 2 + y - 60, // 60 = half of expanded height (120)
-                        zIndex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 120, // Further expanded width to prevent text wrapping
-                        height: 120, // Further expanded height for better spacing
-                      },
-                    ]}
-                    onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
-                  >
-                    <Avatar.Image
-                      size={getScaledFontSize(48)}
-                      source={userImg} />
-                    <Text 
-                      numberOfLines={2}
-                      style={[
-                        styles.orbitAvatarText,
-                        {
-                          fontSize: getScaledFontSize(12),
-                          fontWeight: getScaledFontWeight(500) as any,
-                          color: colors.text,
-                          width: 90,
-                          textAlign: 'center'
-                        }
-                      ]}>
-                      Kendrick L.
-                    </Text>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
-            })}
-          </View>
+          {isTabletDevice ? (
+            <TabletCircleView 
+              doctors={doctors}
+              userImg={userImg}
+              colors={colors}
+              getScaledFontSize={getScaledFontSize}
+              getScaledFontWeight={getScaledFontWeight}
+            />
+          ) : (
+            <PhoneCircleView 
+              doctors={doctors}
+              userImg={userImg}
+              colors={colors}
+              getScaledFontSize={getScaledFontSize}
+              getScaledFontWeight={getScaledFontWeight}
+            />
+          )}
         </View>
         
         <View style={styles.appointmentsSection}>
@@ -333,7 +515,6 @@ const styles = StyleSheet.create({
   },
   linkLine: {
     position: 'absolute',
-    width: 92,
     height: 2,
     top: '50%',
     left: '50%',
