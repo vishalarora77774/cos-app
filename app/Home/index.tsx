@@ -13,8 +13,15 @@ const isTablet = () => {
   return width >= 768; // iPad starts at 768px width
 };
 
+type DoctorRole = 'provider' | 'care_manager' | 'doctor_on_demand';
+
+interface Doctor {
+  key: number;
+  role: DoctorRole;
+}
+
 interface CircleViewProps {
-  doctors: Array<{ key: number }>;
+  doctors: Array<Doctor>;
   userImg: any;
   colors: any;
   getScaledFontSize: (size: number) => number;
@@ -75,6 +82,10 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
         const angle = (idx / doctors.length) * 2 * Math.PI;
         const x = Math.cos(angle) * radius;
         const y = Math.sin(angle) * radius;
+        const isCareManager = u.role === 'care_manager';
+        const avatarSize = isCareManager ? orbitAvatarSize * 1.35 : orbitAvatarSize;
+        const containerSize = isCareManager ? orbitAvatarContainerSize * 1.35 : orbitAvatarContainerSize;
+        const halfContainerSize = containerSize / 2;
         return (
           <React.Fragment key={`doctor-${u.key}`}>
             <View
@@ -92,19 +103,19 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
                 styles.orbitAvatar,
                 {
                   position: 'absolute',
-                  left: containerWidth / 2 + x - 60, // 60 = half of expanded width (120)
-                  top: containerHeight / 2 + y - 60, // 60 = half of expanded height (120)
+                  left: containerWidth / 2 + x - halfContainerSize,
+                  top: containerHeight / 2 + y - halfContainerSize,
                   zIndex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: orbitAvatarContainerSize,
-                  height: orbitAvatarContainerSize,
+                  width: containerSize,
+                  height: containerSize,
                 },
               ]}
               onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
             >
               <Avatar.Image
-                size={getScaledFontSize(orbitAvatarSize)}
+                size={getScaledFontSize(avatarSize)}
                 source={userImg} />
               <Text 
                 numberOfLines={2}
@@ -210,7 +221,10 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
         const angle = (idx / doctors.length) * 2 * Math.PI;
         const x = Math.cos(angle) * radius;
         const y = Math.sin(angle) * radius;
-        const halfContainerSize = orbitAvatarContainerSize / 2;
+        const isCareManager = u.role === 'care_manager';
+        const avatarSize = isCareManager ? orbitAvatarSize * 1.35 : orbitAvatarSize;
+        const containerSize = isCareManager ? orbitAvatarContainerSize * 1.35 : orbitAvatarContainerSize;
+        const halfContainerSize = containerSize / 2;
         return (
           <React.Fragment key={`doctor-${u.key}`}>
             <View
@@ -233,14 +247,14 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
                   zIndex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: orbitAvatarContainerSize,
-                  height: orbitAvatarContainerSize,
+                  width: containerSize,
+                  height: containerSize,
                 },
               ]}
               onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
             >
               <Avatar.Image
-                size={getScaledFontSize(orbitAvatarSize)}
+                size={getScaledFontSize(avatarSize)}
                 source={userImg} />
               <Text 
                 numberOfLines={2}
@@ -264,13 +278,46 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
   );
 }
 
+// Function to generate random doctors array with roles
+const generateDoctors = (isTablet: boolean): Doctor[] => {
+  // Determine count range based on device type
+  const minCount = 5;
+  const maxCount = isTablet ? 11 : 8;
+  
+  // Generate random count within range
+  const count = Math.floor(Math.random() * (maxCount - minCount + 1)) + minCount;
+  
+  // Create array of doctors
+  const doctors: Doctor[] = [];
+  
+  // Always add exactly 1 care manager
+  doctors.push({ key: 0, role: 'care_manager' });
+  
+  // Fill remaining slots with other roles
+  const remainingCount = count - 1;
+  const otherRoles: DoctorRole[] = ['provider', 'doctor_on_demand'];
+  
+  for (let i = 1; i <= remainingCount; i++) {
+    // Randomly assign provider or doctor_on_demand
+    const randomRole = otherRoles[Math.floor(Math.random() * otherRoles.length)];
+    doctors.push({ key: i, role: randomRole });
+  }
+  
+  // Shuffle the array to randomize care manager position
+  for (let i = doctors.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [doctors[i], doctors[j]] = [doctors[j], doctors[i]];
+  }
+  
+  return doctors;
+};
+
 export default function HomeScreen() {
   const { getScaledFontSize, settings, getScaledFontWeight } = useAccessibility();
   const userImg = require('@/assets/images/dummy.jpg');
-  const doctors = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ key: i }));
-  const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
-  
   const isTabletDevice = isTablet();
+  const doctors = React.useMemo(() => generateDoctors(isTabletDevice), [isTabletDevice]);
+  const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   return (
     <AppWrapper notificationCount={3}>
       <ScrollView 
