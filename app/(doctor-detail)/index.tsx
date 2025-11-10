@@ -23,7 +23,8 @@ export default function DoctorDetailScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const tabs = [
-    { id: 'treatment', label: 'Treatment Diagnosis Plan' },
+    { id: 'treatment', label: 'Diagnosis & Treatment Plan' },
+    { id: 'progress', label: 'Progress Notes' },
     { id: 'share', label: 'Share Data' },
     { id: 'appointments', label: 'Appointments' },
   ];
@@ -47,7 +48,7 @@ export default function DoctorDetailScreen() {
   const treatmentPlans = [
     {
       id: 1,
-      title: 'Current Treatment Diagnosis Plan',
+      title: 'Current Diagnosis & Treatment Plan',
       status: 'Active',
       date: 'Started Nov 15, 2024',
       diagnosis: 'Chronic lower back pain with muscle tension and limited range of motion',
@@ -56,7 +57,7 @@ export default function DoctorDetailScreen() {
     },
     {
       id: 2,
-      title: 'Previous Treatment Diagnosis Plan',
+      title: 'Previous Diagnosis & Treatment Recommendations',
       status: 'Completed',
       date: 'Aug 10 - Nov 14, 2024',
       diagnosis: 'Acute lower back pain with suspected disc involvement',
@@ -70,6 +71,37 @@ export default function DoctorDetailScreen() {
     { id: '2', name: 'Dr. Michael Chen', qualifications: 'Orthopedist', image: require('@/assets/images/dummy.jpg') },
     { id: '3', name: 'Dr. Emily Davis', qualifications: 'Neurologist', image: require('@/assets/images/dummy.jpg') },
     { id: '4', name: 'Dr. James Wilson', qualifications: 'Dermatologist', image: require('@/assets/images/dummy.jpg') },
+  ];
+
+  const progressNotes = [
+    {
+      id: 1,
+      date: 'Nov 18, 2024',
+      time: '2:00 PM',
+      author: 'Dr. Max K.',
+      note: 'Patient shows significant improvement in range of motion. Lower back pain has decreased from 7/10 to 4/10. Patient is responding well to physical therapy exercises. Continue with current treatment plan.',
+    },
+    {
+      id: 2,
+      date: 'Nov 11, 2024',
+      time: '10:30 AM',
+      author: 'Dr. Max K.',
+      note: 'Follow-up appointment completed. Patient reports moderate pain relief with current medication regimen. Muscle tension has improved. Recommended continuation of weekly physical therapy sessions.',
+    },
+    {
+      id: 3,
+      date: 'Nov 4, 2024',
+      time: '3:15 PM',
+      author: 'Dr. Max K.',
+      note: 'Initial assessment completed. Patient presents with chronic lower back pain. Started on Ibuprofen 400mg and muscle relaxant. Physical therapy program initiated with focus on core strengthening exercises.',
+    },
+    {
+      id: 4,
+      date: 'Oct 28, 2024',
+      time: '11:00 AM',
+      author: 'Dr. Max K.',
+      note: 'Patient reports increased mobility compared to previous visit. Pain levels manageable with current treatment. No adverse reactions to medications. Plan to continue monitoring progress.',
+    },
   ];
 
   const appointments = [
@@ -120,6 +152,25 @@ export default function DoctorDetailScreen() {
             {plan.medications.map((med, idx) => (
               <Text key={idx} style={[styles.medication, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>• {med}</Text>
             ))}
+          </Card.Content>
+        </Card>
+      ))}
+    </ScrollView>
+  );
+
+  const renderProgressNotes = () => (
+    <ScrollView style={styles.tabContent}>
+      {progressNotes.map((note) => (
+        <Card key={note.id} style={styles.progressNoteCard}>
+          <Card.Content>
+            <View style={styles.progressNoteHeader}>
+              <View>
+                <Text style={[styles.progressNoteDate, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>{note.date}</Text>
+                <Text style={[styles.progressNoteTime, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{note.time}</Text>
+              </View>
+              <Text style={[styles.progressNoteAuthor, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{note.author}</Text>
+            </View>
+            <Text style={[styles.progressNoteText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>{note.note}</Text>
           </Card.Content>
         </Card>
       ))}
@@ -200,6 +251,7 @@ export default function DoctorDetailScreen() {
 
       {/* Tab Content */}
       {activeTab === 'treatment' && renderTreatmentPlan()}
+      {activeTab === 'progress' && renderProgressNotes()}
       {activeTab === 'share' && renderShareData()}
       {activeTab === 'appointments' && renderAppointments()}
     </ScrollView>
@@ -356,5 +408,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginBottom: 8,
+  },
+  progressNoteCard: {
+    marginBottom: 16,
+  },
+  progressNoteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  progressNoteDate: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  progressNoteTime: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  progressNoteAuthor: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  progressNoteText: {
+    fontSize: 14,
+    color: '#333',
   },
 });
