@@ -232,7 +232,7 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
           }
         ]}>Jenny Wilson</Text>
       </View>
-      <Button mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
+      <Button labelStyle={{ fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)), fontWeight: getScaledFontWeight(500) as any, lineHeight: getScaledFontSize(16 * Math.min(scaleFactor, 1.5)) }} mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
         More
       </Button>
       {doctors.map((u, idx) => {
