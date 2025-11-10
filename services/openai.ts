@@ -79,6 +79,20 @@ export async function generateHealthSuggestions(
 
   console.log('Calling OpenAI API with model: gpt-4o-mini');
 
+  // Sort appointments and diagnoses by date (most recent first)
+  const sortedAppointments = healthData.appointments 
+    ? [...healthData.appointments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    : [];
+  const sortedDiagnoses = healthData.doctorDiagnoses 
+    ? [...healthData.doctorDiagnoses].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    : [];
+  
+  const currentDiagnoses = sortedDiagnoses.length > 0 ? [sortedDiagnoses[0]] : [];
+  const previousDiagnoses = sortedDiagnoses.length > 1 ? sortedDiagnoses.slice(1) : [];
+  
+  const currentAppointments = sortedAppointments.filter(apt => apt.status === 'Scheduled' || apt.status === 'Upcoming');
+  const completedAppointments = sortedAppointments.filter(apt => apt.status === 'Completed');
+
   // Construct comprehensive prompt for OpenAI
   const prompt = `You are a helpful medical assistant providing clear, easy-to-understand health summaries for elderly patients.
 
@@ -100,33 +114,66 @@ ${healthData.medications.map(med => `
 - ${med.name}: ${med.dosage} - ${med.frequency} (${med.purpose})
 `).join('\n')}
 
-${healthData.appointments && healthData.appointments.length > 0 ? `
-RECENT APPOINTMENTS:
-${healthData.appointments.map(apt => `
+${sortedAppointments.length > 0 ? `
+APPOINTMENT HISTORY:
+${completedAppointments.length > 0 ? `
+COMPLETED APPOINTMENTS (Most Recent First):
+${completedAppointments.map(apt => `
 - ${apt.type} with ${apt.doctorName}${apt.doctorSpecialty ? ` (${apt.doctorSpecialty})` : ''} on ${apt.date} at ${apt.time}
   Status: ${apt.status}
   ${apt.diagnosis ? `Diagnosis: ${apt.diagnosis}` : ''}
   ${apt.notes ? `Notes: ${apt.notes}` : ''}
 `).join('\n')}
 ` : ''}
+${currentAppointments.length > 0 ? `
+UPCOMING/SCHEDULED APPOINTMENTS:
+${currentAppointments.map(apt => `
+- ${apt.type} with ${apt.doctorName}${apt.doctorSpecialty ? ` (${apt.doctorSpecialty})` : ''} on ${apt.date} at ${apt.time}
+  Status: ${apt.status}
+`).join('\n')}
+` : ''}
+` : ''}
 
-${healthData.doctorDiagnoses && healthData.doctorDiagnoses.length > 0 ? `
-DOCTOR DIAGNOSES:
-${healthData.doctorDiagnoses.map(diag => `
+${sortedDiagnoses.length > 0 ? `
+DIAGNOSIS HISTORY:
+${currentDiagnoses.length > 0 ? `
+CURRENT/MOST RECENT DIAGNOSES:
+${currentDiagnoses.map(diag => `
 - ${diag.doctorName} (${diag.doctorSpecialty}) - ${diag.date}:
   Diagnosis: ${diag.diagnosis}
   ${diag.notes ? `Notes: ${diag.notes}` : ''}
   ${diag.treatmentRecommendations && diag.treatmentRecommendations.length > 0 ? `Treatment Recommendations: ${diag.treatmentRecommendations.join(', ')}` : ''}
 `).join('\n')}
 ` : ''}
+${previousDiagnoses.length > 0 ? `
+PREVIOUS DIAGNOSES (Historical):
+${previousDiagnoses.map(diag => `
+- ${diag.doctorName} (${diag.doctorSpecialty}) - ${diag.date}:
+  Diagnosis: ${diag.diagnosis}
+  ${diag.notes ? `Notes: ${diag.notes}` : ''}
+  ${diag.treatmentRecommendations && diag.treatmentRecommendations.length > 0 ? `Treatment Recommendations: ${diag.treatmentRecommendations.join(', ')}` : ''}
+`).join('\n')}
+` : ''}
+` : ''}
 
 Please provide:
-1. A brief, easy-to-understand summary (6-9 sentences) in simple language that incorporates information from all doctors, appointments, and diagnoses
-2. 3-5 key points the patient should remember (each point should be one simple sentence)
-3. 5-7 specific recommendations for daily care (each recommendation should be actionable and clear)
-4. Any important warnings or precautions (if applicable, otherwise return an empty array)
+1. A brief, easy-to-understand summary (6-9 sentences) in simple language that:
+   - Incorporates information from all doctors, appointments, and diagnoses
+   - Analyzes the progression of diagnoses over time (comparing current vs previous diagnoses)
+   - Identifies trends and improvements or concerns based on appointment history
+   - Considers how different specialists' diagnoses relate to each other
+2. 3-5 key points the patient should remember (each point should be one simple sentence, focusing on important insights from diagnoses and appointments)
+3. 5-7 specific recommendations for daily care (each recommendation should be actionable and clear, incorporating treatment recommendations from diagnoses)
+4. Any important warnings or precautions based on diagnosis trends, appointment findings, or conflicting information between different doctors (if applicable, otherwise return an empty array)
 
 ${isRefresh ? 'Note: This is an updated analysis request. Please provide fresh insights and potentially new perspectives on the patient\'s health information.' : ''}
+
+IMPORTANT ANALYSIS REQUIREMENTS:
+- Compare current diagnoses with previous diagnoses to identify improvements, stability, or new concerns
+- Analyze appointment history to understand the patient's health journey
+- Look for patterns or trends across different doctors' assessments
+- Consider how diagnoses from different specialists (e.g., Cardiologist, Endocrinologist) relate to each other
+- Highlight any significant changes in diagnosis or treatment approach over time
 
 Format your response as a JSON object with these exact keys:
 {
@@ -136,7 +183,7 @@ Format your response as a JSON object with these exact keys:
   "warnings": ["warning 1", "warning 2", ...] or []
 }
 
-Important: Use simple, clear language appropriate for elderly patients. Avoid medical jargon. Consider all diagnoses and appointment information from different doctors when providing your analysis.`;
+Important: Use simple, clear language appropriate for elderly patients. Avoid medical jargon. Make sure to analyze and incorporate insights from both current and previous diagnoses, as well as the complete appointment history.`;
 
   try {
     const response = await fetch(OPENAI_API_URL, {
