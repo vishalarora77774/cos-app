@@ -3,8 +3,9 @@ import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Alert, Platform } from 'react-native';
 import { Avatar, Card } from 'react-native-paper';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 export default function DoctorDetailScreen() {
   const params = useLocalSearchParams();
@@ -21,6 +22,111 @@ export default function DoctorDetailScreen() {
     4: false,
   });
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Doctor contact information (you can get these from params or API)
+  const doctorPhone = params.phone as string || '+1234567890';
+  const doctorEmail = params.email as string || 'doctor@example.com';
+
+  const handleCall = async () => {
+    const url = `tel:${doctorPhone}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Unable to make a phone call');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Unable to make a phone call');
+    }
+  };
+
+  const handleMessage = async () => {
+    const url = `sms:${doctorPhone}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Unable to send a message');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Unable to send a message');
+    }
+  };
+
+  const handleVideoCall = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        // Try FaceTime first
+        const facetimeUrl = `facetime://${doctorPhone}`;
+        const canOpenFaceTime = await Linking.canOpenURL(facetimeUrl);
+        if (canOpenFaceTime) {
+          await Linking.openURL(facetimeUrl);
+          return;
+        }
+        // Fallback to FaceTime audio
+        const facetimeAudioUrl = `facetime-audio://${doctorPhone}`;
+        const canOpenAudio = await Linking.canOpenURL(facetimeAudioUrl);
+        if (canOpenAudio) {
+          await Linking.openURL(facetimeAudioUrl);
+          return;
+        }
+      }
+      
+      // For Android and iOS fallback, show options
+      // The system will show app chooser for these URL schemes if multiple apps are installed
+      const videoApps = [
+        { name: 'Zoom', url: 'zoomus://' },
+        { name: 'Google Meet', url: 'https://meet.google.com' },
+        { name: 'Skype', url: 'skype:' },
+        { name: 'WhatsApp', url: `whatsapp://send?phone=${doctorPhone}` },
+      ];
+      
+      const availableApps = [];
+      for (const app of videoApps) {
+        const canOpen = await Linking.canOpenURL(app.url);
+        if (canOpen) {
+          availableApps.push(app);
+        }
+      }
+      
+      if (availableApps.length > 0) {
+        Alert.alert(
+          'Video Call',
+          'Choose a video calling app:',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            ...availableApps.map(app => ({
+              text: app.name,
+              onPress: () => Linking.openURL(app.url),
+            })),
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Video Call',
+          'No video calling apps found. Please install a video calling app like Zoom, Google Meet, or Skype.',
+        );
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Unable to start a video call');
+    }
+  };
+
+  const handleEmail = async () => {
+    const url = `mailto:${doctorEmail}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'Unable to send an email');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Unable to send an email');
+    }
+  };
 
   const tabs = [
     { id: 'treatment', label: 'Diagnosis & Treatment Plan' },
@@ -226,6 +332,49 @@ export default function DoctorDetailScreen() {
         <Text style={[styles.doctorName, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>{doctorName}</Text>
         <Text style={[styles.qualifications, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>MD, Physical Medicine & Rehabilitation</Text>
         <Text style={[styles.specialty, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>Specialist in Pain Management</Text>
+        
+        {/* Communication Options */}
+        <View style={styles.communicationContainer}>
+          <TouchableOpacity 
+            style={[styles.communicationButton, { backgroundColor: colors.background }]} 
+            onPress={handleCall}
+            accessibilityLabel="Call doctor"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="phone" size={getScaledFontSize(24)} color="#4CAF50" />
+            <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Call</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.communicationButton, { backgroundColor: colors.background }]} 
+            onPress={handleMessage}
+            accessibilityLabel="Message doctor"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="message" size={getScaledFontSize(24)} color="#4CAF50" />
+            <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Message</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.communicationButton, { backgroundColor: colors.background }]} 
+            onPress={handleVideoCall}
+            accessibilityLabel="Video call doctor"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="videocam" size={getScaledFontSize(24)} color="#4CAF50" />
+            <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Video</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.communicationButton, { backgroundColor: colors.background }]} 
+            onPress={handleEmail}
+            accessibilityLabel="Email doctor"
+            accessibilityRole="button"
+          >
+            <MaterialIcons name="email" size={getScaledFontSize(24)} color="#4CAF50" />
+            <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Mail</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Tabs */}
@@ -286,6 +435,37 @@ const styles = StyleSheet.create({
   specialty: {
     fontSize: 14,
     color: '#888',
+    textAlign: 'center',
+  },
+  communicationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 24,
+    paddingHorizontal: 16,
+  },
+  communicationButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#f5f5f5',
+    minWidth: 70,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  communicationLabel: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
   },
   tabScrollContainer: {
