@@ -241,7 +241,7 @@ export default function DoctorDetailScreen() {
           <Card.Content>
             <View style={styles.planHeader}>
               <Text style={[styles.planTitle, { fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>{plan.title}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: plan.status === 'Active' ? '#4CAF50' : '#9E9E9E' }]}>
+              <View style={[styles.statusBadge, { backgroundColor: plan.status === 'Active' ? '#008080' : '#9E9E9E' }]}>
                 <Text style={[styles.statusText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.status}</Text>
               </View>
             </View>
@@ -313,7 +313,7 @@ export default function DoctorDetailScreen() {
               </View>
               <View style={styles.appointmentRight}>
                 <Text style={[styles.appointmentType, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{appointment.type}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: appointment.status === 'Confirmed' ? '#4CAF50' : '#FF9800' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: appointment.status === 'Confirmed' ? '#008080' : '#FF9800' }]}>
                   <Text style={[styles.statusText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{appointment.status}</Text>
                 </View>
               </View>
@@ -341,7 +341,7 @@ export default function DoctorDetailScreen() {
             accessibilityLabel="Call doctor"
             accessibilityRole="button"
           >
-            <MaterialIcons name="phone" size={getScaledFontSize(24)} color="#4CAF50" />
+            <MaterialIcons name="phone" size={getScaledFontSize(24)} color="#008080" />
             <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Call</Text>
           </TouchableOpacity>
           
@@ -351,7 +351,7 @@ export default function DoctorDetailScreen() {
             accessibilityLabel="Message doctor"
             accessibilityRole="button"
           >
-            <MaterialIcons name="message" size={getScaledFontSize(24)} color="#4CAF50" />
+            <MaterialIcons name="message" size={getScaledFontSize(24)} color="#008080" />
             <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Message</Text>
           </TouchableOpacity>
           
@@ -361,7 +361,7 @@ export default function DoctorDetailScreen() {
             accessibilityLabel="Video call doctor"
             accessibilityRole="button"
           >
-            <MaterialIcons name="videocam" size={getScaledFontSize(24)} color="#4CAF50" />
+            <MaterialIcons name="videocam" size={getScaledFontSize(24)} color="#008080" />
             <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Video</Text>
           </TouchableOpacity>
           
@@ -371,7 +371,7 @@ export default function DoctorDetailScreen() {
             accessibilityLabel="Email doctor"
             accessibilityRole="button"
           >
-            <MaterialIcons name="email" size={getScaledFontSize(24)} color="#4CAF50" />
+            <MaterialIcons name="email" size={getScaledFontSize(24)} color="#008080" />
             <Text style={[styles.communicationLabel, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Mail</Text>
           </TouchableOpacity>
         </View>
@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
     minWidth: 120,
   },
   activeTab: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#008080',
   },
   tabText: {
     fontSize: 14,

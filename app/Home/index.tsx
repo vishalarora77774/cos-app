@@ -53,7 +53,7 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
           height: radius * 2,
           borderRadius: radius,
           borderWidth: 2,
-          borderColor: '#e0e0e0',
+          borderColor: '#008080',
           borderStyle: 'dashed',
           left: (containerWidth - radius * 2) / 2,
           top: (containerHeight - radius * 2) / 2,
@@ -75,7 +75,11 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
           }
         ]}>Jenny Wilson</Text>
       </View>
-      <Button mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
+      <Button 
+        mode="contained" 
+        buttonColor="#008080"
+        onPress={() => router.push('/modal')} 
+        style={styles.moreDoctorsButton}>
         More
       </Button>
       {doctors.map((u, idx) => {
@@ -209,8 +213,8 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
           width: radius * 2, // diameter = 2 * radius
           height: radius * 2,
           borderRadius: radius,
-          borderWidth: 2,
-          borderColor: '#e0e0e0',
+          borderWidth: 4,
+          borderColor: '#008080',
           borderStyle: 'dashed',
           left: (containerWidth - radius * 2) / 2,
           top: (containerHeight - radius * 2) / 2,
@@ -232,7 +236,22 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
           }
         ]}>Jenny Wilson</Text>
       </View>
-      <Button labelStyle={{ fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)), fontWeight: getScaledFontWeight(500) as any, lineHeight: getScaledFontSize(16 * Math.min(scaleFactor, 1.5)) }} mode="contained" onPress={() => router.push('/modal')} style={styles.moreDoctorsButton}>
+      <Button 
+        labelStyle={{ 
+          fontSize: getScaledFontSize(12), 
+          fontWeight: getScaledFontWeight(500) as any, 
+          lineHeight: getScaledFontSize(16) 
+        }} 
+        mode="contained" 
+        buttonColor="#008080"
+        onPress={() => router.push('/modal')} 
+        style={[
+          styles.moreDoctorsButton,
+          {
+            paddingHorizontal: getScaledFontSize(20),
+            borderRadius: getScaledFontSize(24),
+          }
+        ]}>
         More
       </Button>
       {doctors.map((u, idx) => {
@@ -383,17 +402,44 @@ export default function HomeScreen() {
               color: colors.text,
             }
           ]}>Upcoming Appointments</Text>
-          <TouchableOpacity onPress={() => router.push('/appointments-modal')} style={styles.deckContainer}>
+          <TouchableOpacity onPress={() => router.push('/appointments-modal')} style={[
+            styles.deckContainer,
+            {
+              height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+            }
+          ]}>
             {/* First card */}
-            <Card style={[styles.appointmentCard, styles.firstCard]}>
-              <View style={styles.listItemContainer}>
-                <List.Icon icon="calendar-clock" />
-                <View style={styles.listItemContent}>
+            <Card style={[
+              styles.appointmentCard,
+              styles.firstCard,
+              {
+                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+              }
+            ]}>
+              <View style={[
+                styles.listItemContainer,
+                {
+                  paddingHorizontal: getScaledFontSize(16),
+                  paddingVertical: getScaledFontSize(8),
+                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+                }
+              ]}>
+                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
+                  <List.Icon icon="calendar-clock" />
+                </View>
+                <View style={[
+                  styles.listItemContent,
+                  {
+                    marginLeft: getScaledFontSize(16),
+                    flexShrink: 1,
+                  }
+                ]}>
                   <Text style={[
                     styles.appointmentTitle,
                     {
                       fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500'
+                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
+                      marginBottom: getScaledFontSize(2),
                     }
                   ]}>Therapy Session</Text>
                   <Text style={[
@@ -408,15 +454,37 @@ export default function HomeScreen() {
             </Card>
 
             {/* Second card (stacked behind) */}
-            <Card style={[styles.appointmentCard, styles.secondCard]}>
-              <View style={styles.listItemContainer}>
-                <List.Icon icon="stethoscope" />
-                <View style={styles.listItemContent}>
+            <Card style={[
+              styles.appointmentCard,
+              styles.secondCard,
+              {
+                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+              }
+            ]}>
+              <View style={[
+                styles.listItemContainer,
+                {
+                  paddingHorizontal: getScaledFontSize(16),
+                  paddingVertical: getScaledFontSize(8),
+                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+                }
+              ]}>
+                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
+                  <List.Icon icon="stethoscope" />
+                </View>
+                <View style={[
+                  styles.listItemContent,
+                  {
+                    marginLeft: getScaledFontSize(16),
+                    flexShrink: 1,
+                  }
+                ]}>
                   <Text style={[
                     styles.appointmentTitle,
                     {
                       fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500'
+                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
+                      marginBottom: getScaledFontSize(2),
                     }
                   ]}>Annual Check-up</Text>
                   <Text style={[
@@ -431,15 +499,37 @@ export default function HomeScreen() {
             </Card>
 
             {/* Third card (stacked behind) */}
-            <Card style={[styles.appointmentCard, styles.thirdCard]}>
-              <View style={styles.listItemContainer}>
-                <List.Icon icon="tooth" />
-                <View style={styles.listItemContent}>
+            <Card style={[
+              styles.appointmentCard,
+              styles.thirdCard,
+              {
+                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+              }
+            ]}>
+              <View style={[
+                styles.listItemContainer,
+                {
+                  paddingHorizontal: getScaledFontSize(16),
+                  paddingVertical: getScaledFontSize(8),
+                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+                }
+              ]}>
+                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
+                  <List.Icon icon="tooth" />
+                </View>
+                <View style={[
+                  styles.listItemContent,
+                  {
+                    marginLeft: getScaledFontSize(16),
+                    flexShrink: 1,
+                  }
+                ]}>
                   <Text style={[
                     styles.appointmentTitle,
                     {
                       fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500'
+                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
+                      marginBottom: getScaledFontSize(2),
                     }
                   ]}>Dental Cleaning</Text>
                   <Text style={[
