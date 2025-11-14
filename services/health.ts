@@ -358,6 +358,7 @@ export const getTodayStepCount = (): Promise<number> => {
 
 /**
  * Fetch heart rate samples for today and return the most recent value
+ * If no data for today, falls back to latest available data
  */
 export const getTodayHeartRate = (): Promise<number | null> => {
   return new Promise((resolve, reject) => {
@@ -376,12 +377,23 @@ export const getTodayHeartRate = (): Promise<number | null> => {
       return;
     }
 
-    const options: HealthInputOptions = getTodayDateRange();
+    // Get today's date boundaries
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    // Step 1: Try to get today's data first
+    const todayOptions: HealthInputOptions = {
+      startDate: todayStart.toISOString(),
+      endDate: now.toISOString(),
+      includeManuallyAdded: true,
+      ascending: false,
+    };
 
-    console.log('❤️ Fetching heart rate with options:', options);
+    console.log('❤️ Step 1: Fetching heart rate for TODAY with options:', JSON.stringify(todayOptions, null, 2));
 
     getHeartRateMethod(
-      options,
+      todayOptions,
       (error: string | any, results: HealthValue[]) => {
         if (error) {
           const errorObj = typeof error === 'string' ? { message: error } : error;
@@ -398,21 +410,69 @@ export const getTodayHeartRate = (): Promise<number | null> => {
           return;
         }
         
-        console.log('❤️ Heart rate raw results:', JSON.stringify(results, null, 2));
-        console.log('❤️ Heart rate samples count:', results?.length || 0);
+        console.log('❤️ Step 1 results - Heart rate samples count:', results?.length || 0);
         
-        // Return the most recent heart rate value
-        if (results && results.length > 0) {
-          const sortedResults = results.sort(
+        // Filter to only include samples from today
+        const todaySamples = (results || []).filter((sample) => {
+          const sampleDate = new Date(sample.startDate);
+          return sampleDate >= todayStart && sampleDate <= todayEnd;
+        });
+        
+        // Return the most recent heart rate value from today
+        if (todaySamples.length > 0) {
+          const sortedResults = todaySamples.sort(
             (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
           );
           const latestValue = sortedResults[0].value || null;
-          console.log('✅ Resolving heart rate:', latestValue);
+          console.log('✅ Found heart rate for TODAY:', latestValue);
           resolve(latestValue);
-        } else {
-          console.log('⚠️ No heart rate samples found for today');
-          resolve(null);
+          return;
         }
+        
+        // Step 2: No data for today, try to get latest available data
+        console.log('⚠️ No heart rate found for today, trying to get latest available data...');
+        
+        // Query last 30 days to find latest data
+        const monthAgo = new Date(todayStart);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        
+        const latestOptions: HealthInputOptions = {
+          startDate: monthAgo.toISOString(),
+          endDate: now.toISOString(),
+          includeManuallyAdded: true,
+          ascending: false, // Most recent first
+        };
+
+        console.log('❤️ Step 2: Fetching latest available heart rate with options:', JSON.stringify(latestOptions, null, 2));
+
+        getHeartRateMethod(
+          latestOptions,
+          (error2: string | any, results2: HealthValue[]) => {
+            if (error2) {
+              console.error('❌ Error fetching latest heart rate:', error2);
+              // If we can't get latest data either, return null
+              resolve(null);
+              return;
+            }
+            
+            if (!results2 || results2.length === 0) {
+              console.log('⚠️ No heart rate data found in HealthKit at all');
+              resolve(null);
+              return;
+            }
+            
+            // Get the most recent heart rate value
+            const sortedResults = results2.sort(
+              (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+            );
+            
+            const latestValue = sortedResults[0].value || null;
+            const latestDate = new Date(sortedResults[0].startDate);
+            console.log(`✅ Found latest available heart rate: ${latestValue} from ${latestDate.toLocaleDateString()}`);
+            
+            resolve(latestValue);
+          }
+        );
       }
     );
   });
@@ -420,6 +480,7 @@ export const getTodayHeartRate = (): Promise<number | null> => {
 
 /**
  * Fetch sleep samples for today and calculate total sleep hours
+ * If no data for today, falls back to latest available data
  */
 export const getTodaySleepHours = (): Promise<number> => {
   return new Promise((resolve, reject) => {
@@ -438,12 +499,23 @@ export const getTodaySleepHours = (): Promise<number> => {
       return;
     }
 
-    const options: HealthInputOptions = getTodayDateRange();
+    // Get today's date boundaries
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    // Step 1: Try to get today's data first
+    const todayOptions: HealthInputOptions = {
+      startDate: todayStart.toISOString(),
+      endDate: now.toISOString(),
+      includeManuallyAdded: true,
+      ascending: false,
+    };
 
-    console.log('😴 Fetching sleep data with options:', options);
+    console.log('😴 Step 1: Fetching sleep data for TODAY with options:', JSON.stringify(todayOptions, null, 2));
 
     getSleepMethod(
-      options,
+      todayOptions,
       (error: string | any, results: HealthValue[]) => {
         if (error) {
           const errorObj = typeof error === 'string' ? { message: error } : error;
@@ -460,27 +532,109 @@ export const getTodaySleepHours = (): Promise<number> => {
           return;
         }
         
-        console.log('😴 Sleep raw results:', JSON.stringify(results, null, 2));
-        console.log('😴 Sleep samples count:', results?.length || 0);
+        console.log('😴 Step 1 results - Sleep samples count:', results?.length || 0);
         
-        // Calculate total sleep hours from samples
-        if (results && results.length > 0) {
+        // Filter to only include samples from today
+        const todaySamples = (results || []).filter((sample) => {
+          const sampleDate = new Date(sample.startDate);
+          return sampleDate >= todayStart && sampleDate <= todayEnd;
+        });
+        
+        // Calculate total sleep hours from today's samples
+        if (todaySamples.length > 0) {
           let totalMinutes = 0;
-          results.forEach((sample, index) => {
+          todaySamples.forEach((sample, index) => {
             const start = new Date(sample.startDate);
             const end = new Date(sample.endDate);
             const duration = (end.getTime() - start.getTime()) / (1000 * 60); // Convert to minutes
             totalMinutes += duration;
-            console.log(`😴 Sleep sample ${index + 1}: ${duration.toFixed(1)} minutes (${start.toLocaleTimeString()} - ${end.toLocaleTimeString()})`);
+            console.log(`😴 Today sleep sample ${index + 1}: ${duration.toFixed(1)} minutes (${start.toLocaleTimeString()} - ${end.toLocaleTimeString()})`);
           });
           const hours = totalMinutes / 60;
           const roundedHours = Math.round(hours * 10) / 10;
-          console.log('✅ Resolving sleep hours:', roundedHours, `(${totalMinutes} minutes)`);
+          console.log('✅ Found sleep hours for TODAY:', roundedHours, `(${totalMinutes} minutes)`);
           resolve(roundedHours);
-        } else {
-          console.log('⚠️ No sleep samples found for today');
-          resolve(0);
+          return;
         }
+        
+        // Step 2: No data for today, try to get latest available data
+        console.log('⚠️ No sleep data found for today, trying to get latest available data...');
+        
+        // Query last 30 days to find latest data
+        const monthAgo = new Date(todayStart);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        
+        const latestOptions: HealthInputOptions = {
+          startDate: monthAgo.toISOString(),
+          endDate: now.toISOString(),
+          includeManuallyAdded: true,
+          ascending: false, // Most recent first
+        };
+
+        console.log('😴 Step 2: Fetching latest available sleep data with options:', JSON.stringify(latestOptions, null, 2));
+
+        getSleepMethod(
+          latestOptions,
+          (error2: string | any, results2: HealthValue[]) => {
+            if (error2) {
+              console.error('❌ Error fetching latest sleep data:', error2);
+              // If we can't get latest data either, return 0
+              resolve(0);
+              return;
+            }
+            
+            if (!results2 || results2.length === 0) {
+              console.log('⚠️ No sleep data found in HealthKit at all');
+              resolve(0);
+              return;
+            }
+            
+            // Get the most recent day's sleep data
+            // Group samples by date (same day)
+            const samplesByDate = new Map<string, HealthValue[]>();
+            
+            results2.forEach((sample) => {
+              const sampleDate = new Date(sample.startDate);
+              const dateKey = `${sampleDate.getFullYear()}-${sampleDate.getMonth()}-${sampleDate.getDate()}`;
+              
+              if (!samplesByDate.has(dateKey)) {
+                samplesByDate.set(dateKey, []);
+              }
+              samplesByDate.get(dateKey)!.push(sample);
+            });
+            
+            // Get the most recent date
+            const sortedDates = Array.from(samplesByDate.keys()).sort((a, b) => {
+              return new Date(b).getTime() - new Date(a).getTime();
+            });
+            
+            if (sortedDates.length > 0) {
+              const latestDateKey = sortedDates[0];
+              const latestDateSamples = samplesByDate.get(latestDateKey)!;
+              
+              // Calculate total sleep hours for the most recent day
+              let totalMinutes = 0;
+              latestDateSamples.forEach((sample, index) => {
+                const start = new Date(sample.startDate);
+                const end = new Date(sample.endDate);
+                const duration = (end.getTime() - start.getTime()) / (1000 * 60); // Convert to minutes
+                totalMinutes += duration;
+                console.log(`😴 Latest sleep sample ${index + 1}: ${duration.toFixed(1)} minutes (${start.toLocaleTimeString()} - ${end.toLocaleTimeString()})`);
+              });
+              
+              const hours = totalMinutes / 60;
+              const roundedHours = Math.round(hours * 10) / 10;
+              
+              const latestDate = new Date(latestDateSamples[0].startDate);
+              console.log(`✅ Found latest available sleep hours: ${roundedHours} from ${latestDate.toLocaleDateString()} (${totalMinutes} minutes)`);
+              
+              resolve(roundedHours);
+            } else {
+              console.log('⚠️ Could not determine latest sleep data');
+              resolve(0);
+            }
+          }
+        );
       }
     );
   });
@@ -488,6 +642,7 @@ export const getTodaySleepHours = (): Promise<number> => {
 
 /**
  * Fetch active energy burned (calories) for today
+ * If no data for today, falls back to latest available data
  */
 export const getTodayCaloriesBurned = (): Promise<number> => {
   return new Promise((resolve, reject) => {
@@ -511,28 +666,18 @@ export const getTodayCaloriesBurned = (): Promise<number> => {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     
-    // Query with a wider range (last 7 days) to ensure we get data, then filter to today
-    // This helps catch timezone issues
-    const weekAgo = new Date(todayStart);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    
-    const options: HealthInputOptions = {
-      startDate: weekAgo.toISOString(), // Query last 7 days
-      endDate: now.toISOString(), // Up to now
+    // Step 1: Try to get today's data first
+    const todayOptions: HealthInputOptions = {
+      startDate: todayStart.toISOString(),
+      endDate: now.toISOString(),
       includeManuallyAdded: true,
-      ascending: false, // Get most recent first
+      ascending: false,
     };
 
-    console.log('🔥 Fetching calories burned with options:', JSON.stringify(options, null, 2));
-    console.log('🔥 Today range for filtering:', {
-      start: todayStart.toISOString(),
-      end: todayEnd.toISOString(),
-      startLocal: todayStart.toLocaleString(),
-      endLocal: todayEnd.toLocaleString(),
-    });
+    console.log('🔥 Step 1: Fetching calories for TODAY with options:', JSON.stringify(todayOptions, null, 2));
 
     getCaloriesMethod(
-      options,
+      todayOptions,
       (error: string | any, results: HealthValue[] | HealthValue) => {
         if (error) {
           const errorObj = typeof error === 'string' ? { message: error } : error;
@@ -552,77 +697,98 @@ export const getTodayCaloriesBurned = (): Promise<number> => {
         // Handle both array and single object responses
         let resultsArray = Array.isArray(results) ? results : (results ? [results] : []);
         
-        console.log('🔥 Calories raw results:', JSON.stringify(results, null, 2));
-        console.log('🔥 Calories samples count (before filtering):', resultsArray.length);
-        console.log('🔥 Results type:', typeof results);
-        console.log('🔥 Results is array:', Array.isArray(results));
+        console.log('🔥 Step 1 results - Calories samples count:', resultsArray.length);
         
-        if (resultsArray.length === 0) {
-          console.warn('⚠️ No calorie samples returned from HealthKit');
-          console.warn('⚠️ This could mean:');
-          console.warn('   1. Permission not granted for ActiveEnergyBurned');
-          console.warn('   2. No data exists in HealthKit for this time period');
-          console.warn('   3. Date range mismatch');
-          resolve(0);
+        // Filter to only include samples from today
+        const todaySamples = resultsArray.filter((sample) => {
+          const sampleDate = new Date(sample.startDate);
+          return sampleDate >= todayStart && sampleDate <= todayEnd;
+        });
+        
+        // Calculate today's total
+        let todayTotal = 0;
+        if (todaySamples.length > 0) {
+          todayTotal = todaySamples.reduce((sum, sample) => {
+            return sum + (Number(sample.value) || 0);
+          }, 0);
+          console.log('✅ Found calories for TODAY:', Math.round(todayTotal));
+          console.log('🔥 Today samples:', todaySamples.length);
+          resolve(Math.round(todayTotal));
           return;
         }
         
-        // Log all samples first to see what we got
-        console.log('🔥 All samples received:');
-        resultsArray.forEach((sample, idx) => {
-          const sampleDate = new Date(sample.startDate);
-          console.log(`   Sample ${idx + 1}:`, {
-            value: sample.value,
-            startDate: sample.startDate,
-            startDateLocal: sampleDate.toLocaleString(),
-            isToday: sampleDate >= todayStart && sampleDate <= todayEnd,
-          });
-        });
+        // Step 2: No data for today, try to get latest available data
+        console.log('⚠️ No calories found for today, trying to get latest available data...');
         
-        // Filter to only include samples from today (handle timezone issues)
-        const todaySamples = resultsArray.filter((sample) => {
-          const sampleDate = new Date(sample.startDate);
-          const isToday = sampleDate >= todayStart && sampleDate <= todayEnd;
-          if (!isToday) {
-            console.log(`🔥 Filtering out sample from ${sample.startDate} (${sampleDate.toLocaleString()}) - not today`);
-          }
-          return isToday;
-        });
+        // Query last 30 days to find latest data
+        const monthAgo = new Date(todayStart);
+        monthAgo.setDate(monthAgo.getDate() - 30);
         
-        console.log('🔥 Calories samples count (after filtering to today):', todaySamples.length);
-        resultsArray = todaySamples;
-        
-        // Sum all calories burned today
-        if (resultsArray && resultsArray.length > 0) {
-          // Log each sample for debugging
-          resultsArray.forEach((sample, index) => {
-            console.log(`🔥 Calorie sample ${index + 1}:`, {
-              value: sample.value,
-              valueType: typeof sample.value,
-              startDate: sample.startDate,
-              endDate: sample.endDate,
-              unit: (sample as any).unit,
-              fullSample: JSON.stringify(sample),
+        const latestOptions: HealthInputOptions = {
+          startDate: monthAgo.toISOString(),
+          endDate: now.toISOString(),
+          includeManuallyAdded: true,
+          ascending: false, // Most recent first
+        };
+
+        console.log('🔥 Step 2: Fetching latest available calories with options:', JSON.stringify(latestOptions, null, 2));
+
+        getCaloriesMethod(
+          latestOptions,
+          (error2: string | any, results2: HealthValue[] | HealthValue) => {
+            if (error2) {
+              console.error('❌ Error fetching latest calories:', error2);
+              // If we can't get latest data either, return 0
+              resolve(0);
+              return;
+            }
+            
+            let latestResultsArray = Array.isArray(results2) ? results2 : (results2 ? [results2] : []);
+            
+            if (latestResultsArray.length === 0) {
+              console.log('⚠️ No calorie data found in HealthKit at all');
+              resolve(0);
+              return;
+            }
+            
+            // Get the most recent day's data
+            // Group samples by date (same day)
+            const samplesByDate = new Map<string, HealthValue[]>();
+            
+            latestResultsArray.forEach((sample) => {
+              const sampleDate = new Date(sample.startDate);
+              const dateKey = `${sampleDate.getFullYear()}-${sampleDate.getMonth()}-${sampleDate.getDate()}`;
+              
+              if (!samplesByDate.has(dateKey)) {
+                samplesByDate.set(dateKey, []);
+              }
+              samplesByDate.get(dateKey)!.push(sample);
             });
-          });
-          
-          const totalCalories = resultsArray.reduce(
-            (sum, sample) => {
-              const value = Number(sample.value) || 0;
-              console.log(`🔥 Adding sample value: ${value} (total so far: ${sum + value})`);
-              return sum + value;
-            },
-            0
-          );
-          console.log('✅ Total calories calculated:', totalCalories);
-          console.log('✅ Resolving calories burned:', Math.round(totalCalories));
-          resolve(Math.round(totalCalories));
-        } else {
-          console.log('⚠️ No calorie samples found for today');
-          console.log('⚠️ Results:', results);
-          console.log('⚠️ Date range used:', options);
-          resolve(0);
-        }
+            
+            // Get the most recent date
+            const sortedDates = Array.from(samplesByDate.keys()).sort((a, b) => {
+              return new Date(b).getTime() - new Date(a).getTime();
+            });
+            
+            if (sortedDates.length > 0) {
+              const latestDateKey = sortedDates[0];
+              const latestDateSamples = samplesByDate.get(latestDateKey)!;
+              
+              const latestTotal = latestDateSamples.reduce((sum, sample) => {
+                return sum + (Number(sample.value) || 0);
+              }, 0);
+              
+              const latestDate = new Date(latestDateSamples[0].startDate);
+              console.log(`✅ Found latest available calories: ${Math.round(latestTotal)} from ${latestDate.toLocaleDateString()}`);
+              console.log(`🔥 Latest date samples: ${latestDateSamples.length}`);
+              
+              resolve(Math.round(latestTotal));
+            } else {
+              console.log('⚠️ Could not determine latest calorie data');
+              resolve(0);
+            }
+          }
+        );
       }
     );
   });
