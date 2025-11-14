@@ -17,53 +17,66 @@ export interface HealthMetrics {
 
 /**
  * Get the HealthKit module (either from JS wrapper or native module directly)
+ * Based on react-native-health documentation: https://github.com/agencyenterprise/react-native-health
  */
 const getHealthKitModule = () => {
-  // Try JS wrapper first
-  if (AppleHealthKit && typeof AppleHealthKit.initHealthKit === 'function') {
-    console.log('Using JS wrapper for HealthKit');
-    return AppleHealthKit;
-  }
-
-  // Fallback to native module directly
-  // The package uses NativeModules.AppleHealthKit, but the pod is RNAppleHealthKit
-  const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit || NativeModules.HealthKit;
-  if (nativeModule) {
-    console.log('Native module found:', nativeModule ? 'Yes' : 'No');
-    console.log('Native module keys:', nativeModule ? Object.keys(nativeModule) : 'N/A');
-    console.log('Has initHealthKit:', nativeModule ? typeof nativeModule.initHealthKit : 'N/A');
-    
-    // Check if methods exist on native module
-    if (typeof nativeModule.initHealthKit === 'function') {
-      console.log('Using native module directly');
-      // Create a wrapper with Constants if needed
-      return {
-        ...nativeModule,
-        Constants: AppleHealthKit?.Constants || {
-          Permissions: {
-            StepCount: 'StepCount',
-            HeartRate: 'HeartRate',
-            SleepAnalysis: 'SleepAnalysis',
-            ActiveEnergyBurned: 'ActiveEnergyBurned',
-          },
+  // The package exports a JS wrapper that should have all methods
+  // But if methods aren't available, try native module directly
+  const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
+  
+  // Check native module first for all methods
+  if (nativeModule && typeof nativeModule.getStepCount === 'function') {
+    console.log('✅ Using native module directly (all methods available)');
+    return {
+      ...nativeModule,
+      Constants: AppleHealthKit?.Constants || {
+        Permissions: {
+          StepCount: 'StepCount',
+          HeartRate: 'HeartRate',
+          SleepAnalysis: 'SleepAnalysis',
+          ActiveEnergyBurned: 'ActiveEnergyBurned',
         },
-      };
+      },
+    };
+  }
+  
+  // Try JS wrapper
+  if (AppleHealthKit) {
+    // Check if JS wrapper has the methods we need
+    const hasAllMethods = 
+      typeof (AppleHealthKit as any).getStepCount === 'function' &&
+      typeof (AppleHealthKit as any).getHeartRateSamples === 'function' &&
+      typeof (AppleHealthKit as any).getSleepSamples === 'function' &&
+      typeof (AppleHealthKit as any).getActiveEnergyBurned === 'function';
+    
+    if (hasAllMethods) {
+      console.log('✅ Using JS wrapper (all methods available)');
+      return AppleHealthKit;
     } else {
-      // Log what methods ARE available
-      const availableMethods = nativeModule ? Object.keys(nativeModule).filter(key => typeof nativeModule[key] === 'function') : [];
-      console.warn('Native module exists but initHealthKit is not a function');
-      console.warn('Available methods on native module:', availableMethods);
-      console.warn('All native module keys:', nativeModule ? Object.keys(nativeModule) : []);
+      console.warn('⚠️ JS wrapper exists but missing methods');
+      console.log('📋 Available methods:', Object.keys(AppleHealthKit).filter(key => typeof (AppleHealthKit as any)[key] === 'function'));
     }
   }
-
-  // Also check the JS wrapper structure
-  if (AppleHealthKit) {
-    console.log('JS wrapper exists:', !!AppleHealthKit);
-    console.log('JS wrapper keys:', Object.keys(AppleHealthKit));
-    console.log('JS wrapper has initHealthKit:', typeof AppleHealthKit.initHealthKit);
+  
+  // If native module exists but methods aren't bridged, this is a build issue
+  if (nativeModule) {
+    console.error('❌ Native module exists but methods are not bridged. This requires a full rebuild.');
+    console.log('📋 Native module methods:', Object.keys(nativeModule).filter(key => typeof nativeModule[key] === 'function'));
+    
+    // Return native module anyway - might work after rebuild
+    return {
+      ...nativeModule,
+      Constants: AppleHealthKit?.Constants || {
+        Permissions: {
+          StepCount: 'StepCount',
+          HeartRate: 'HeartRate',
+          SleepAnalysis: 'SleepAnalysis',
+          ActiveEnergyBurned: 'ActiveEnergyBurned',
+        },
+      },
+    };
   }
-
+  
   return null;
 };
 
@@ -75,96 +88,213 @@ const isHealthKitAvailable = (): boolean => {
     return false;
   }
 
-  const healthKit = getHealthKitModule();
-  
-  if (!healthKit) {
-    console.warn('HealthKit native module not found. Available modules:', Object.keys(NativeModules));
-    return false;
+  // Check native module directly first
+  const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
+  if (nativeModule && typeof nativeModule.initHealthKit === 'function') {
+    return true;
   }
 
-  if (typeof healthKit.initHealthKit !== 'function') {
-    console.warn('HealthKit module found but initHealthKit is not a function. Module keys:', Object.keys(healthKit));
-    return false;
+  // Check JS wrapper
+  if (AppleHealthKit && typeof (AppleHealthKit as any).initHealthKit === 'function') {
+    return true;
   }
 
-  return true;
+  // If we have a native module but no initHealthKit, log what we do have
+  if (nativeModule) {
+    const methods = Object.keys(nativeModule).filter(k => typeof nativeModule[k] === 'function');
+    console.warn('⚠️ Native module exists but initHealthKit not found. Available methods:', methods);
+  }
+
+  return false;
 };
 
 /**
  * Initialize HealthKit with required permissions
+ * Based on react-native-health documentation: https://github.com/agencyenterprise/react-native-health
  */
 export const initializeHealthKit = (): Promise<boolean> => {
   return new Promise((resolve, reject) => {
-    // Check if HealthKit is available
-    if (!isHealthKitAvailable()) {
-      let errorMessage = 'HealthKit is not available. ';
-      
-      if (Platform.OS !== 'ios') {
-        errorMessage += 'HealthKit is only available on iOS devices.';
-      } else {
-        const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
-        if (!nativeModule) {
-          errorMessage += 'The native HealthKit module is not linked. Please:\n';
-          errorMessage += '1. Run: cd ios && pod install\n';
-          errorMessage += '2. Rebuild the app: npx expo run:ios --clean\n';
-          errorMessage += '3. Test on a physical iOS device (simulators do not support HealthKit)';
-        } else {
-          errorMessage += 'The native module exists but initHealthKit method is not available.\n';
-          errorMessage += 'This usually means the app needs to be rebuilt. Try:\n';
-          errorMessage += '1. Stop Metro bundler\n';
-          errorMessage += '2. Clear cache: npx expo start --clear\n';
-          errorMessage += '3. Rebuild: npx expo run:ios --clean';
-        }
-      }
-      
-      console.error('HealthKit not available:', errorMessage);
-      reject(new Error(errorMessage));
+    if (Platform.OS !== 'ios') {
+      reject(new Error('HealthKit is only available on iOS devices.'));
       return;
     }
 
-    const healthKit = getHealthKitModule();
-    if (!healthKit) {
-      reject(new Error('Failed to get HealthKit module'));
+    // Try native module first (most reliable)
+    const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
+    let initMethod: any = null;
+    let Constants: any = null;
+
+    if (nativeModule && typeof nativeModule.initHealthKit === 'function') {
+      console.log('✅ Using native module for initHealthKit');
+      initMethod = nativeModule.initHealthKit;
+      // Get Constants from JS wrapper if available, otherwise use fallback
+      Constants = (AppleHealthKit as any)?.Constants || {
+        Permissions: {
+          StepCount: 'StepCount',
+          HeartRate: 'HeartRate',
+          SleepAnalysis: 'SleepAnalysis',
+          ActiveEnergyBurned: 'ActiveEnergyBurned',
+        },
+      };
+    } 
+    // Fallback to JS wrapper
+    else if (AppleHealthKit && typeof (AppleHealthKit as any).initHealthKit === 'function') {
+      console.log('✅ Using JS wrapper for initHealthKit');
+      initMethod = (AppleHealthKit as any).initHealthKit;
+      Constants = (AppleHealthKit as any).Constants || {
+        Permissions: {
+          StepCount: 'StepCount',
+          HeartRate: 'HeartRate',
+          SleepAnalysis: 'SleepAnalysis',
+          ActiveEnergyBurned: 'ActiveEnergyBurned',
+        },
+      };
+    }
+    // Last resort - try getHealthKitModule
+    else {
+      const module = getHealthKitModule();
+      if (module && typeof (module as any).initHealthKit === 'function') {
+        console.log('✅ Using getHealthKitModule for initHealthKit');
+        initMethod = (module as any).initHealthKit;
+        Constants = (module as any).Constants || (AppleHealthKit as any)?.Constants || {
+          Permissions: {
+            StepCount: 'StepCount',
+            HeartRate: 'HeartRate',
+            SleepAnalysis: 'SleepAnalysis',
+            ActiveEnergyBurned: 'ActiveEnergyBurned',
+          },
+        };
+      }
+    }
+
+    if (!initMethod) {
+      const errorMessage = 'HealthKit initHealthKit method not available. The app needs to be rebuilt: npx expo run:ios --clean';
+      console.error('❌', errorMessage);
+      console.log('📋 Native module exists:', !!nativeModule);
+      console.log('📋 Native module has initHealthKit:', nativeModule ? typeof nativeModule.initHealthKit : 'N/A');
+      console.log('📋 JS wrapper exists:', !!AppleHealthKit);
+      console.log('📋 JS wrapper has initHealthKit:', AppleHealthKit ? typeof (AppleHealthKit as any).initHealthKit : 'N/A');
+      reject(new Error(errorMessage));
       return;
     }
 
     const permissions: HealthKitPermissions = {
       permissions: {
         read: [
-          healthKit.Constants.Permissions.StepCount,
-          healthKit.Constants.Permissions.HeartRate,
-          healthKit.Constants.Permissions.SleepAnalysis,
-          healthKit.Constants.Permissions.ActiveEnergyBurned,
+          Constants.Permissions.StepCount,
+          Constants.Permissions.HeartRate,
+          Constants.Permissions.SleepAnalysis,
+          Constants.Permissions.ActiveEnergyBurned,
         ],
         write: [], // We only need read permissions
       },
     };
 
-    healthKit.initHealthKit(permissions, (error: string) => {
+    console.log('🔐 Requesting HealthKit permissions:', permissions);
+
+    initMethod(permissions, (error: string) => {
       if (error) {
-        console.log('Error initializing HealthKit: ', error);
-        reject(new Error(error));
+        console.error('❌ Error initializing HealthKit:', error);
+        // Parse error to provide better message
+        const errorObj = typeof error === 'string' ? { message: error } : error;
+        const errorMessage = errorObj?.message || String(error);
+        
+        if (errorMessage.includes('authorization') || errorMessage.includes('permission')) {
+          reject(new Error('Health permissions were denied or not granted. Please enable them in Settings > Privacy & Security > Health > CoS'));
+        } else {
+          reject(new Error(errorMessage));
+        }
         return;
       }
-      console.log('HealthKit initialized successfully');
-      resolve(true);
+      
+      // initHealthKit can succeed even if permissions aren't granted
+      // Check authorization status to verify
+      handleInitSuccess(resolve);
     });
   });
 };
 
 /**
+ * Handle successful HealthKit initialization
+ */
+const handleInitSuccess = (resolve: (value: boolean) => void) => {
+  // Try to check auth status if available
+  const healthKit = AppleHealthKit || getHealthKitModule();
+  if (healthKit && typeof (healthKit as any).getAuthStatus === 'function') {
+    const Constants = (AppleHealthKit as any)?.Constants || {
+      Permissions: {
+        StepCount: 'StepCount',
+        HeartRate: 'HeartRate',
+        SleepAnalysis: 'SleepAnalysis',
+        ActiveEnergyBurned: 'ActiveEnergyBurned',
+      },
+    };
+    
+    const permissions: HealthKitPermissions = {
+      permissions: {
+        read: [
+          Constants.Permissions.StepCount,
+          Constants.Permissions.HeartRate,
+          Constants.Permissions.SleepAnalysis,
+          Constants.Permissions.ActiveEnergyBurned,
+        ],
+        write: [],
+      },
+    };
+    
+    (healthKit as any).getAuthStatus(permissions, (authError: string, authResults: any) => {
+      if (authError) {
+        console.warn('⚠️ Could not check auth status:', authError);
+        console.log('✅ HealthKit initialized (auth status check failed)');
+        resolve(true);
+        return;
+      }
+      
+      // Check if any read permission is authorized
+      const readStatuses = authResults?.permissions?.read || [];
+      const isAuthorized = readStatuses.some((status: number) => status === 2); // 2 = SharingAuthorized
+      
+      if (isAuthorized) {
+        console.log('✅ HealthKit initialized successfully - permissions granted');
+        resolve(true);
+      } else {
+        console.warn('⚠️ HealthKit initialized but permissions not granted');
+        console.log('📋 Auth status:', JSON.stringify(authResults, null, 2));
+        // Still resolve - let the data fetch show the actual error
+        resolve(true);
+      }
+    });
+  } else {
+    console.log('✅ HealthKit initialized (no auth status check available)');
+    resolve(true);
+  }
+};
+
+/**
  * Get today's date range for HealthKit queries
+ * HealthKit expects dates in ISO format, but we need to ensure we're using local timezone
  */
 const getTodayDateRange = () => {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-  return {
+  const dateRange = {
     startDate: startOfDay.toISOString(),
     endDate: endOfDay.toISOString(),
   };
+  
+  console.log('📅 Date range for HealthKit query:', {
+    start: dateRange.startDate,
+    end: dateRange.endDate,
+    startLocal: startOfDay.toLocaleString(),
+    endLocal: endOfDay.toLocaleString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    now: now.toISOString(),
+    nowLocal: now.toLocaleString(),
+  });
+  
+  return dateRange;
 };
 
 /**
@@ -172,21 +302,56 @@ const getTodayDateRange = () => {
  */
 export const getTodayStepCount = (): Promise<number> => {
   return new Promise((resolve, reject) => {
+    // Try to get the method from native module directly if JS wrapper doesn't have it
+    const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
     const healthKit = getHealthKitModule();
-    if (!healthKit || typeof healthKit.getStepCount !== 'function') {
-      reject(new Error('HealthKit getStepCount method not available'));
+    
+    // Get the method - try JS wrapper first, then native module
+    const getStepCountMethod = 
+      (healthKit && typeof (healthKit as any).getStepCount === 'function') 
+        ? (healthKit as any).getStepCount
+        : (nativeModule && typeof nativeModule.getStepCount === 'function')
+          ? nativeModule.getStepCount
+          : null;
+    
+    if (!getStepCountMethod) {
+      const errorMsg = `HealthKit getStepCount method not available. This usually means the app needs to be rebuilt. Run: npx expo run:ios --clean`;
+      console.error('❌', errorMsg);
+      console.log('📋 Available native methods:', nativeModule ? Object.keys(nativeModule).filter(k => typeof nativeModule[k] === 'function') : 'No native module');
+      console.log('📋 Available JS wrapper methods:', healthKit ? Object.keys(healthKit).filter(k => typeof (healthKit as any)[k] === 'function') : 'No JS wrapper');
+      reject(new Error(errorMsg));
       return;
     }
 
     const options: HealthInputOptions = getTodayDateRange();
 
-    healthKit.getStepCount(options, (error: string, results: HealthValue) => {
+    console.log('👣 Fetching step count with options:', options);
+
+    getStepCountMethod(options, (error: string | any, results: HealthValue) => {
       if (error) {
-        console.log('Error fetching step count: ', error);
-        reject(error);
+        // Handle authorization errors specifically
+        const errorObj = typeof error === 'string' ? { message: error } : error;
+        const errorMessage = errorObj?.message || String(error);
+        const errorCode = errorObj?.code || errorObj?.userInfo?.['Error reason'] || '';
+        
+        console.error('❌ Error fetching step count:', errorMessage);
+        console.error('❌ Error details:', JSON.stringify(errorObj, null, 2));
+        
+        if (errorMessage.includes('Not authorized') || errorMessage.includes('authorization') || errorCode.includes('Not authorized')) {
+          reject(new Error('Step count permission not granted. Please enable in Settings > Privacy & Security > Health > CoS'));
+        } else {
+          reject(new Error(errorMessage));
+        }
         return;
       }
-      resolve(results.value || 0);
+      
+      console.log('👣 Step count raw results:', JSON.stringify(results, null, 2));
+      console.log('👣 Step count value:', results?.value);
+      console.log('👣 Step count type:', typeof results?.value);
+      
+      const stepValue = results?.value || 0;
+      console.log('✅ Resolving step count:', stepValue);
+      resolve(stepValue);
     });
   });
 };
@@ -196,29 +361,56 @@ export const getTodayStepCount = (): Promise<number> => {
  */
 export const getTodayHeartRate = (): Promise<number | null> => {
   return new Promise((resolve, reject) => {
+    const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
     const healthKit = getHealthKitModule();
-    if (!healthKit || typeof healthKit.getHeartRateSamples !== 'function') {
-      reject(new Error('HealthKit getHeartRateSamples method not available'));
+    
+    const getHeartRateMethod = 
+      (healthKit && typeof (healthKit as any).getHeartRateSamples === 'function')
+        ? (healthKit as any).getHeartRateSamples
+        : (nativeModule && typeof nativeModule.getHeartRateSamples === 'function')
+          ? nativeModule.getHeartRateSamples
+          : null;
+    
+    if (!getHeartRateMethod) {
+      reject(new Error('HealthKit getHeartRateSamples method not available. Rebuild required: npx expo run:ios --clean'));
       return;
     }
 
     const options: HealthInputOptions = getTodayDateRange();
 
-    healthKit.getHeartRateSamples(
+    console.log('❤️ Fetching heart rate with options:', options);
+
+    getHeartRateMethod(
       options,
-      (error: string, results: HealthValue[]) => {
+      (error: string | any, results: HealthValue[]) => {
         if (error) {
-          console.log('Error fetching heart rate: ', error);
-          reject(error);
+          const errorObj = typeof error === 'string' ? { message: error } : error;
+          const errorMessage = errorObj?.message || String(error);
+          
+          console.error('❌ Error fetching heart rate:', errorMessage);
+          console.error('❌ Error details:', JSON.stringify(errorObj, null, 2));
+          
+          if (errorMessage.includes('Authorization not determined') || errorMessage.includes('authorization')) {
+            reject(new Error('Heart rate permission not granted. Please enable in Settings > Privacy & Security > Health > CoS'));
+          } else {
+            reject(new Error(errorMessage));
+          }
           return;
         }
+        
+        console.log('❤️ Heart rate raw results:', JSON.stringify(results, null, 2));
+        console.log('❤️ Heart rate samples count:', results?.length || 0);
+        
         // Return the most recent heart rate value
         if (results && results.length > 0) {
           const sortedResults = results.sort(
             (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
           );
-          resolve(sortedResults[0].value || null);
+          const latestValue = sortedResults[0].value || null;
+          console.log('✅ Resolving heart rate:', latestValue);
+          resolve(latestValue);
         } else {
+          console.log('⚠️ No heart rate samples found for today');
           resolve(null);
         }
       }
@@ -231,34 +423,62 @@ export const getTodayHeartRate = (): Promise<number | null> => {
  */
 export const getTodaySleepHours = (): Promise<number> => {
   return new Promise((resolve, reject) => {
+    const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
     const healthKit = getHealthKitModule();
-    if (!healthKit || typeof healthKit.getSleepSamples !== 'function') {
-      reject(new Error('HealthKit getSleepSamples method not available'));
+    
+    const getSleepMethod = 
+      (healthKit && typeof (healthKit as any).getSleepSamples === 'function')
+        ? (healthKit as any).getSleepSamples
+        : (nativeModule && typeof nativeModule.getSleepSamples === 'function')
+          ? nativeModule.getSleepSamples
+          : null;
+    
+    if (!getSleepMethod) {
+      reject(new Error('HealthKit getSleepSamples method not available. Rebuild required: npx expo run:ios --clean'));
       return;
     }
 
     const options: HealthInputOptions = getTodayDateRange();
 
-    healthKit.getSleepSamples(
+    console.log('😴 Fetching sleep data with options:', options);
+
+    getSleepMethod(
       options,
-      (error: string, results: HealthValue[]) => {
+      (error: string | any, results: HealthValue[]) => {
         if (error) {
-          console.log('Error fetching sleep data: ', error);
-          reject(error);
+          const errorObj = typeof error === 'string' ? { message: error } : error;
+          const errorMessage = errorObj?.message || String(error);
+          
+          console.error('❌ Error fetching sleep data:', errorMessage);
+          console.error('❌ Error details:', JSON.stringify(errorObj, null, 2));
+          
+          if (errorMessage.includes('Authorization not determined') || errorMessage.includes('authorization')) {
+            reject(new Error('Sleep permission not granted. Please enable in Settings > Privacy & Security > Health > CoS'));
+          } else {
+            reject(new Error(errorMessage));
+          }
           return;
         }
+        
+        console.log('😴 Sleep raw results:', JSON.stringify(results, null, 2));
+        console.log('😴 Sleep samples count:', results?.length || 0);
+        
         // Calculate total sleep hours from samples
         if (results && results.length > 0) {
           let totalMinutes = 0;
-          results.forEach((sample) => {
+          results.forEach((sample, index) => {
             const start = new Date(sample.startDate);
             const end = new Date(sample.endDate);
             const duration = (end.getTime() - start.getTime()) / (1000 * 60); // Convert to minutes
             totalMinutes += duration;
+            console.log(`😴 Sleep sample ${index + 1}: ${duration.toFixed(1)} minutes (${start.toLocaleTimeString()} - ${end.toLocaleTimeString()})`);
           });
           const hours = totalMinutes / 60;
-          resolve(Math.round(hours * 10) / 10); // Round to 1 decimal place
+          const roundedHours = Math.round(hours * 10) / 10;
+          console.log('✅ Resolving sleep hours:', roundedHours, `(${totalMinutes} minutes)`);
+          resolve(roundedHours);
         } else {
+          console.log('⚠️ No sleep samples found for today');
           resolve(0);
         }
       }
@@ -271,30 +491,136 @@ export const getTodaySleepHours = (): Promise<number> => {
  */
 export const getTodayCaloriesBurned = (): Promise<number> => {
   return new Promise((resolve, reject) => {
+    const nativeModule = NativeModules.AppleHealthKit || NativeModules.RNAppleHealthKit;
     const healthKit = getHealthKitModule();
-    if (!healthKit || typeof healthKit.getActiveEnergyBurned !== 'function') {
-      reject(new Error('HealthKit getActiveEnergyBurned method not available'));
+    
+    const getCaloriesMethod = 
+      (healthKit && typeof (healthKit as any).getActiveEnergyBurned === 'function')
+        ? (healthKit as any).getActiveEnergyBurned
+        : (nativeModule && typeof nativeModule.getActiveEnergyBurned === 'function')
+          ? nativeModule.getActiveEnergyBurned
+          : null;
+    
+    if (!getCaloriesMethod) {
+      reject(new Error('HealthKit getActiveEnergyBurned method not available. Rebuild required: npx expo run:ios --clean'));
       return;
     }
 
-    const options: HealthInputOptions = getTodayDateRange();
+    // Get today's date boundaries for filtering (in local time)
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    
+    // Query with a wider range (last 7 days) to ensure we get data, then filter to today
+    // This helps catch timezone issues
+    const weekAgo = new Date(todayStart);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const options: HealthInputOptions = {
+      startDate: weekAgo.toISOString(), // Query last 7 days
+      endDate: now.toISOString(), // Up to now
+      includeManuallyAdded: true,
+      ascending: false, // Get most recent first
+    };
 
-    healthKit.getActiveEnergyBurned(
+    console.log('🔥 Fetching calories burned with options:', JSON.stringify(options, null, 2));
+    console.log('🔥 Today range for filtering:', {
+      start: todayStart.toISOString(),
+      end: todayEnd.toISOString(),
+      startLocal: todayStart.toLocaleString(),
+      endLocal: todayEnd.toLocaleString(),
+    });
+
+    getCaloriesMethod(
       options,
-      (error: string, results: HealthValue[]) => {
+      (error: string | any, results: HealthValue[] | HealthValue) => {
         if (error) {
-          console.log('Error fetching active energy burned: ', error);
-          reject(error);
+          const errorObj = typeof error === 'string' ? { message: error } : error;
+          const errorMessage = errorObj?.message || String(error);
+          
+          console.error('❌ Error fetching active energy burned:', errorMessage);
+          console.error('❌ Error details:', JSON.stringify(errorObj, null, 2));
+          
+          if (errorMessage.includes('Authorization not determined') || errorMessage.includes('authorization') || errorMessage.includes('Not authorized')) {
+            reject(new Error('Calories permission not granted. Please enable in Settings > Privacy & Security > Health > CoS'));
+          } else {
+            reject(new Error(errorMessage));
+          }
           return;
         }
+        
+        // Handle both array and single object responses
+        let resultsArray = Array.isArray(results) ? results : (results ? [results] : []);
+        
+        console.log('🔥 Calories raw results:', JSON.stringify(results, null, 2));
+        console.log('🔥 Calories samples count (before filtering):', resultsArray.length);
+        console.log('🔥 Results type:', typeof results);
+        console.log('🔥 Results is array:', Array.isArray(results));
+        
+        if (resultsArray.length === 0) {
+          console.warn('⚠️ No calorie samples returned from HealthKit');
+          console.warn('⚠️ This could mean:');
+          console.warn('   1. Permission not granted for ActiveEnergyBurned');
+          console.warn('   2. No data exists in HealthKit for this time period');
+          console.warn('   3. Date range mismatch');
+          resolve(0);
+          return;
+        }
+        
+        // Log all samples first to see what we got
+        console.log('🔥 All samples received:');
+        resultsArray.forEach((sample, idx) => {
+          const sampleDate = new Date(sample.startDate);
+          console.log(`   Sample ${idx + 1}:`, {
+            value: sample.value,
+            startDate: sample.startDate,
+            startDateLocal: sampleDate.toLocaleString(),
+            isToday: sampleDate >= todayStart && sampleDate <= todayEnd,
+          });
+        });
+        
+        // Filter to only include samples from today (handle timezone issues)
+        const todaySamples = resultsArray.filter((sample) => {
+          const sampleDate = new Date(sample.startDate);
+          const isToday = sampleDate >= todayStart && sampleDate <= todayEnd;
+          if (!isToday) {
+            console.log(`🔥 Filtering out sample from ${sample.startDate} (${sampleDate.toLocaleString()}) - not today`);
+          }
+          return isToday;
+        });
+        
+        console.log('🔥 Calories samples count (after filtering to today):', todaySamples.length);
+        resultsArray = todaySamples;
+        
         // Sum all calories burned today
-        if (results && results.length > 0) {
-          const totalCalories = results.reduce(
-            (sum, sample) => sum + (sample.value || 0),
+        if (resultsArray && resultsArray.length > 0) {
+          // Log each sample for debugging
+          resultsArray.forEach((sample, index) => {
+            console.log(`🔥 Calorie sample ${index + 1}:`, {
+              value: sample.value,
+              valueType: typeof sample.value,
+              startDate: sample.startDate,
+              endDate: sample.endDate,
+              unit: (sample as any).unit,
+              fullSample: JSON.stringify(sample),
+            });
+          });
+          
+          const totalCalories = resultsArray.reduce(
+            (sum, sample) => {
+              const value = Number(sample.value) || 0;
+              console.log(`🔥 Adding sample value: ${value} (total so far: ${sum + value})`);
+              return sum + value;
+            },
             0
           );
+          console.log('✅ Total calories calculated:', totalCalories);
+          console.log('✅ Resolving calories burned:', Math.round(totalCalories));
           resolve(Math.round(totalCalories));
         } else {
+          console.log('⚠️ No calorie samples found for today');
+          console.log('⚠️ Results:', results);
+          console.log('⚠️ Date range used:', options);
           resolve(0);
         }
       }
@@ -306,24 +632,67 @@ export const getTodayCaloriesBurned = (): Promise<number> => {
  * Fetch all health metrics for today
  */
 export const getTodayHealthMetrics = async (): Promise<HealthMetrics> => {
+  console.log('🏥 Starting to fetch all health metrics...');
+  
   try {
-    // Initialize HealthKit if not already initialized
+    // Initialize HealthKit - MUST complete before fetching data
+    // According to react-native-health docs, initHealthKit must succeed before reading data
     try {
       await initializeHealthKit();
+      console.log('✅ HealthKit initialized successfully');
+      
+      // Small delay to ensure permissions are fully processed
+      await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error) {
-      // HealthKit might already be initialized, continue
-      console.log('HealthKit initialization check:', error);
+      // If initialization fails, we can't fetch data
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ HealthKit initialization failed:', errorMessage);
+      
+      // Check if it's an authorization error
+      if (errorMessage.includes('authorization') || errorMessage.includes('permission')) {
+        return {
+          steps: 0,
+          heartRate: null,
+          sleepHours: 0,
+          caloriesBurned: 0,
+          isLoading: false,
+          error: 'Health permissions are required. Please grant permissions when prompted.',
+        };
+      }
+      
+      return {
+        steps: 0,
+        heartRate: null,
+        sleepHours: 0,
+        caloriesBurned: 0,
+        isLoading: false,
+        error: `Failed to initialize HealthKit: ${errorMessage}`,
+      };
     }
 
-    // Fetch all metrics in parallel
+    console.log('📊 Fetching all metrics in parallel...');
+
+    // Fetch all metrics in parallel with better error handling
     const [steps, heartRate, sleepHours, caloriesBurned] = await Promise.all([
-      getTodayStepCount().catch(() => 0),
-      getTodayHeartRate().catch(() => null),
-      getTodaySleepHours().catch(() => 0),
-      getTodayCaloriesBurned().catch(() => 0),
+      getTodayStepCount().catch((err) => {
+        console.error('❌ Failed to get steps:', err);
+        return 0;
+      }),
+      getTodayHeartRate().catch((err) => {
+        console.error('❌ Failed to get heart rate:', err);
+        return null;
+      }),
+      getTodaySleepHours().catch((err) => {
+        console.error('❌ Failed to get sleep:', err);
+        return 0;
+      }),
+      getTodayCaloriesBurned().catch((err) => {
+        console.error('❌ Failed to get calories:', err);
+        return 0;
+      }),
     ]);
 
-    return {
+    const metrics = {
       steps,
       heartRate,
       sleepHours,
@@ -331,7 +700,17 @@ export const getTodayHealthMetrics = async (): Promise<HealthMetrics> => {
       isLoading: false,
       error: null,
     };
+
+    console.log('📊 Final health metrics:', {
+      steps: `${steps} steps`,
+      heartRate: heartRate ? `${heartRate} bpm` : 'N/A',
+      sleepHours: `${sleepHours} hours`,
+      caloriesBurned: `${caloriesBurned} calories`,
+    });
+
+    return metrics;
   } catch (error) {
+    console.error('❌ Error in getTodayHealthMetrics:', error);
     return {
       steps: 0,
       heartRate: null,
