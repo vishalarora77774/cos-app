@@ -2,9 +2,10 @@ import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Card, IconButton, List } from 'react-native-paper';
+import { getTodayHealthMetrics, HealthMetrics } from '@/services/health';
 
 interface Task {
   id: number;
@@ -20,6 +21,15 @@ export default function TodayScheduleScreen() {
   const { getScaledFontSize, settings, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const userImg = require('@/assets/images/dummy.jpg');
+
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({
+    steps: 0,
+    heartRate: null,
+    sleepHours: 0,
+    caloriesBurned: 0,
+    isLoading: true,
+    error: null,
+  });
 
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -68,6 +78,25 @@ export default function TodayScheduleScreen() {
       completed: false,
     },
   ]);
+
+  useEffect(() => {
+    // Fetch health metrics when component mounts
+    const fetchHealthData = async () => {
+      setHealthMetrics((prev) => ({ ...prev, isLoading: true }));
+      try {
+        const metrics = await getTodayHealthMetrics();
+        setHealthMetrics(metrics);
+      } catch (error) {
+        setHealthMetrics((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch health data',
+        }));
+      }
+    };
+
+    fetchHealthData();
+  }, []);
 
   const toggleTaskCompletion = (taskId: number) => {
     setTasks(tasks.map(task => 
@@ -135,6 +164,157 @@ export default function TodayScheduleScreen() {
               </Text>
             </View>
           </View>
+        </Card>
+
+        {/* Health Metrics Section */}
+        <Card style={[styles.healthMetricsCard, { backgroundColor: colors.background }]}>
+          <Text style={[
+            styles.healthMetricsTitle,
+            {
+              fontSize: getScaledFontSize(16),
+              fontWeight: getScaledFontWeight(600) as any,
+              color: colors.text,
+              marginBottom: 16,
+            }
+          ]}>
+            Today's Health Metrics
+          </Text>
+          
+          {healthMetrics.isLoading ? (
+            <Text style={[
+              styles.healthMetricsText,
+              {
+                fontSize: getScaledFontSize(14),
+                color: colors.text + '80',
+              }
+            ]}>
+              Loading health data...
+            </Text>
+          ) : healthMetrics.error ? (
+            <Text style={[
+              styles.healthMetricsText,
+              {
+                fontSize: getScaledFontSize(14),
+                color: '#ff6b6b',
+              }
+            ]}>
+              {healthMetrics.error}
+            </Text>
+          ) : (
+            <View style={styles.healthMetricsGrid}>
+              <View style={styles.healthMetricItem}>
+                <View style={styles.healthMetricIconContainer}>
+                  <List.Icon icon="walk" color="#0a7ea4" />
+                </View>
+                <View style={styles.healthMetricContent}>
+                  <Text style={[
+                    styles.healthMetricValue,
+                    {
+                      fontSize: getScaledFontSize(20),
+                      fontWeight: getScaledFontWeight(700) as any,
+                      color: colors.text,
+                    }
+                  ]}>
+                    {healthMetrics.steps.toLocaleString()}
+                  </Text>
+                  <Text style={[
+                    styles.healthMetricLabel,
+                    {
+                      fontSize: getScaledFontSize(12),
+                      fontWeight: getScaledFontWeight(400) as any,
+                      color: colors.text + '80',
+                    }
+                  ]}>
+                    Steps
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.healthMetricItem}>
+                <View style={styles.healthMetricIconContainer}>
+                  <List.Icon icon="heart" color="#0a7ea4" />
+                </View>
+                <View style={styles.healthMetricContent}>
+                  <Text style={[
+                    styles.healthMetricValue,
+                    {
+                      fontSize: getScaledFontSize(20),
+                      fontWeight: getScaledFontWeight(700) as any,
+                      color: colors.text,
+                    }
+                  ]}>
+                    {healthMetrics.heartRate ? `${Math.round(healthMetrics.heartRate)}` : 'N/A'}
+                  </Text>
+                  <Text style={[
+                    styles.healthMetricLabel,
+                    {
+                      fontSize: getScaledFontSize(12),
+                      fontWeight: getScaledFontWeight(400) as any,
+                      color: colors.text + '80',
+                    }
+                  ]}>
+                    Heart Rate (bpm)
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.healthMetricItem}>
+                <View style={styles.healthMetricIconContainer}>
+                  <List.Icon icon="sleep" color="#0a7ea4" />
+                </View>
+                <View style={styles.healthMetricContent}>
+                  <Text style={[
+                    styles.healthMetricValue,
+                    {
+                      fontSize: getScaledFontSize(20),
+                      fontWeight: getScaledFontWeight(700) as any,
+                      color: colors.text,
+                    }
+                  ]}>
+                    {healthMetrics.sleepHours}h
+                  </Text>
+                  <Text style={[
+                    styles.healthMetricLabel,
+                    {
+                      fontSize: getScaledFontSize(12),
+                      fontWeight: getScaledFontWeight(400) as any,
+                      color: colors.text + '80',
+                    }
+                  ]}>
+                    Sleep
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.healthMetricItem}>
+                <View style={styles.healthMetricIconContainer}>
+                  <List.Icon icon="fire" color="#0a7ea4" />
+                </View>
+                <View style={styles.healthMetricContent}>
+                  <Text style={[
+                    styles.healthMetricValue,
+                    {
+                      fontSize: getScaledFontSize(20),
+                      fontWeight: getScaledFontWeight(700) as any,
+                      color: colors.text,
+                    }
+                  ]}>
+                    {healthMetrics.caloriesBurned.toLocaleString()}
+                  </Text>
+                  <Text style={[
+                    styles.healthMetricLabel,
+                    {
+                      fontSize: getScaledFontSize(12),
+                      fontWeight: getScaledFontWeight(400) as any,
+                      color: colors.text + '80',
+                    }
+                  ]}>
+                    Calories
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
         </Card>
 
         {/* Progress Section */}
@@ -391,6 +571,50 @@ const styles = StyleSheet.create({
   },
   taskDescription: {
     fontSize: 14,
+  },
+  healthMetricsCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+  healthMetricsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  healthMetricsText: {
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  healthMetricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  healthMetricItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '48%',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(10, 126, 164, 0.1)',
+  },
+  healthMetricIconContainer: {
+    marginRight: 12,
+  },
+  healthMetricContent: {
+    flex: 1,
+  },
+  healthMetricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  healthMetricLabel: {
+    fontSize: 12,
   },
 });
 
