@@ -836,36 +836,97 @@ export const getTodayHealthMetrics = async (): Promise<HealthMetrics> => {
       };
     }
 
-    console.log('📊 Fetching all metrics in parallel...');
+        console.log('📊 Fetching all metrics in parallel...');
 
-    // Fetch all metrics in parallel with better error handling
-    const [steps, heartRate, sleepHours, caloriesBurned] = await Promise.all([
-      getTodayStepCount().catch((err) => {
-        console.error('❌ Failed to get steps:', err);
-        return 0;
-      }),
-      getTodayHeartRate().catch((err) => {
-        console.error('❌ Failed to get heart rate:', err);
-        return null;
-      }),
-      getTodaySleepHours().catch((err) => {
-        console.error('❌ Failed to get sleep:', err);
-        return 0;
-      }),
-      getTodayCaloriesBurned().catch((err) => {
-        console.error('❌ Failed to get calories:', err);
-        return 0;
-      }),
-    ]);
+        // Helper to check if error is permission-related
+        const isPermissionError = (err: any): boolean => {
+          const errorMessage = err?.message || String(err) || '';
+          const errorLower = errorMessage.toLowerCase();
+          return (
+            errorLower.includes('permission') ||
+            errorLower.includes('authorization') ||
+            errorLower.includes('denied') ||
+            errorLower.includes('not granted') ||
+            errorLower.includes('not authorized') ||
+            errorLower.includes('authorization not determined')
+          );
+        };
 
-    const metrics = {
-      steps,
-      heartRate,
-      sleepHours,
-      caloriesBurned,
-      isLoading: false,
-      error: null,
-    };
+        // Fetch all metrics in parallel with better error handling
+        const errors: string[] = [];
+        const permissionErrors: string[] = [];
+        
+        const [steps, heartRate, sleepHours, caloriesBurned] = await Promise.all([
+          getTodayStepCount().catch((err) => {
+            console.error('❌ Failed to get steps:', err);
+            const errMsg = err?.message || String(err) || '';
+            errors.push(errMsg);
+            if (isPermissionError(err)) {
+              permissionErrors.push(errMsg);
+              console.log('🔐 Steps permission error detected:', errMsg);
+            }
+            return 0;
+          }),
+          getTodayHeartRate().catch((err) => {
+            console.error('❌ Failed to get heart rate:', err);
+            const errMsg = err?.message || String(err) || '';
+            errors.push(errMsg);
+            if (isPermissionError(err)) {
+              permissionErrors.push(errMsg);
+              console.log('🔐 Heart rate permission error detected:', errMsg);
+            }
+            return null;
+          }),
+          getTodaySleepHours().catch((err) => {
+            console.error('❌ Failed to get sleep:', err);
+            const errMsg = err?.message || String(err) || '';
+            errors.push(errMsg);
+            if (isPermissionError(err)) {
+              permissionErrors.push(errMsg);
+              console.log('🔐 Sleep permission error detected:', errMsg);
+            }
+            return 0;
+          }),
+          getTodayCaloriesBurned().catch((err) => {
+            console.error('❌ Failed to get calories:', err);
+            const errMsg = err?.message || String(err) || '';
+            errors.push(errMsg);
+            if (isPermissionError(err)) {
+              permissionErrors.push(errMsg);
+              console.log('🔐 Calories permission error detected:', errMsg);
+            }
+            return 0;
+          }),
+        ]);
+
+        console.log('📊 Health metrics fetch results:', {
+          steps,
+          heartRate,
+          sleepHours,
+          caloriesBurned,
+          totalErrors: errors.length,
+          permissionErrors: permissionErrors.length,
+          allZero: steps === 0 && heartRate === null && sleepHours === 0 && caloriesBurned === 0,
+        });
+
+        // If we got permission errors OR all values are 0/null (likely permission denial), set error
+        const permissionError = permissionErrors.length > 0 || 
+          (errors.length > 0 && steps === 0 && heartRate === null && sleepHours === 0 && caloriesBurned === 0)
+          ? 'Health permissions are required. Please enable them in Settings > Privacy & Security > Health > CoS'
+          : null;
+        
+        if (permissionError) {
+          console.log('⚠️ Setting permission error in metrics');
+        }
+
+        const metrics = {
+          steps,
+          heartRate,
+          sleepHours,
+          caloriesBurned,
+          isLoading: false,
+          error: permissionError,
+        };
 
     console.log('📊 Final health metrics:', {
       steps: `${steps} steps`,

@@ -2,9 +2,9 @@ import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Avatar, Card, IconButton, List } from 'react-native-paper';
+import React, { useEffect, useState, useRef } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Platform, AppState, RefreshControl } from 'react-native';
+import { Avatar, Card, IconButton, List, Button } from 'react-native-paper';
 import { getTodayHealthMetrics, HealthMetrics } from '@/services/health';
 
 interface Task {
@@ -30,6 +30,9 @@ export default function TodayScheduleScreen() {
     isLoading: true,
     error: null,
   });
+
+  const [refreshing, setRefreshing] = useState(false);
+  const appState = useRef(AppState.currentState);
 
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -79,24 +82,100 @@ export default function TodayScheduleScreen() {
     },
   ]);
 
+  // Fetch health data function
+  const fetchHealthData = async (showLoading = true) => {
+    if (showLoading) {
+      setHealthMetrics((prev) => ({ ...prev, isLoading: true }));
+    }
+    try {
+      const metrics = await getTodayHealthMetrics();
+      setHealthMetrics(metrics);
+    } catch (error) {
+      setHealthMetrics((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch health data',
+      }));
+    }
+  };
+
+  // Pull to refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHealthData(false);
+    setRefreshing(false);
+  };
+
   useEffect(() => {
     // Fetch health metrics when component mounts
-    const fetchHealthData = async () => {
-      setHealthMetrics((prev) => ({ ...prev, isLoading: true }));
-      try {
-        const metrics = await getTodayHealthMetrics();
-        setHealthMetrics(metrics);
-      } catch (error) {
-        setHealthMetrics((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: error instanceof Error ? error.message : 'Failed to fetch health data',
-        }));
-      }
-    };
-
     fetchHealthData();
+
+    // Listen for app state changes to re-check permissions when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground, re-check health data
+        console.log('🔄 App came to foreground, re-checking health data...');
+        fetchHealthData(false);
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
+
+  // Check if error is permission-related
+  const isPermissionError = () => {
+    if (!healthMetrics.error) {
+      // Also check if all values are 0/null - this might indicate permission denial
+      const allZero = 
+        healthMetrics.steps === 0 &&
+        healthMetrics.heartRate === null &&
+        healthMetrics.sleepHours === 0 &&
+        healthMetrics.caloriesBurned === 0;
+      
+      // If all values are zero and we're not loading, it's likely a permission issue
+      if (allZero && !healthMetrics.isLoading) {
+        console.log('⚠️ All health metrics are zero - likely permission issue');
+        return true;
+      }
+      return false;
+    }
+    const errorLower = healthMetrics.error.toLowerCase();
+    const isPermission = (
+      errorLower.includes('permission') ||
+      errorLower.includes('authorization') ||
+      errorLower.includes('denied') ||
+      errorLower.includes('not granted') ||
+      errorLower.includes('required') ||
+      errorLower.includes('not authorized')
+    );
+    console.log('🔍 Checking permission error:', {
+      error: healthMetrics.error,
+      isPermission,
+      errorLower,
+    });
+    return isPermission;
+  };
+
+  // Open iOS Settings app to Health permissions
+  const openHealthSettings = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        // Open the app's settings page (user can navigate to Health from there)
+        await Linking.openURL('app-settings:');
+      } else {
+        // For Android, open app settings
+        await Linking.openSettings();
+      }
+    } catch (error) {
+      console.error('Error opening settings:', error);
+    }
+  };
 
   const toggleTaskCompletion = (taskId: number) => {
     setTasks(tasks.map(task => 
@@ -109,7 +188,15 @@ export default function TodayScheduleScreen() {
 
   return (
     <AppWrapper>
-      <ScrollView 
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.text}
+            colors={[colors.text]}
+          />
+        }
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -167,155 +254,223 @@ export default function TodayScheduleScreen() {
         </Card>
 
         {/* Health Metrics Section */}
-        <Card style={[styles.healthMetricsCard, { backgroundColor: colors.background }]}>
-          <Text style={[
-            styles.healthMetricsTitle,
-            {
-              fontSize: getScaledFontSize(16),
-              fontWeight: getScaledFontWeight(600) as any,
-              color: colors.text,
-              marginBottom: 16,
-            }
-          ]}>
-            Today's Health Metrics
-          </Text>
-          
-          {healthMetrics.isLoading ? (
-            <Text style={[
-              styles.healthMetricsText,
-              {
-                fontSize: getScaledFontSize(14),
-                color: colors.text + '80',
-              }
-            ]}>
-              Loading health data...
-            </Text>
-          ) : healthMetrics.error ? (
-            <Text style={[
-              styles.healthMetricsText,
-              {
-                fontSize: getScaledFontSize(14),
-                color: '#ff6b6b',
-              }
-            ]}>
-              {healthMetrics.error}
-            </Text>
+        {!healthMetrics.isLoading && (
+          // Show permission error card if permissions are denied
+          // Check: explicit error OR all values are 0/null (likely permission denial)
+          (isPermissionError() || 
+           (healthMetrics.steps === 0 && 
+            healthMetrics.heartRate === null && 
+            healthMetrics.sleepHours === 0 && 
+            healthMetrics.caloriesBurned === 0)) ? (
+            <Card style={[styles.healthMetricsCard, { backgroundColor: colors.background }]}>
+              <Text style={[
+                styles.healthMetricsTitle,
+                {
+                  fontSize: getScaledFontSize(16),
+                  fontWeight: getScaledFontWeight(600) as any,
+                  color: colors.text,
+                  marginBottom: 16,
+                }
+              ]}>
+                Health Metrics
+              </Text>
+              <View style={styles.permissionErrorContainer}>
+                <Text style={[
+                  styles.permissionErrorText,
+                  {
+                    fontSize: getScaledFontSize(14),
+                    color: colors.text + 'CC',
+                    marginBottom: getScaledFontSize(16),
+                    textAlign: 'center',
+                    paddingHorizontal: 8,
+                  }
+                ]}>
+                  Health data access is required to display your activity metrics.
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={openHealthSettings}
+                  style={[
+                    styles.permissionButton,
+                    {
+                      marginVertical: getScaledFontSize(8),
+                    }
+                  ]}
+                  buttonColor="#0a7ea4"
+                  textColor="#ffffff"
+                  labelStyle={{
+                    fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(600) as any,
+                    paddingVertical: getScaledFontSize(4),
+                  }}
+                  contentStyle={{
+                    paddingVertical: getScaledFontSize(8),
+                  }}
+                >
+                  Enable Health Permissions
+                </Button>
+                <Text style={[
+                  styles.permissionHintText,
+                  {
+                    fontSize: getScaledFontSize(12),
+                    color: colors.text + '80',
+                    marginTop: getScaledFontSize(12),
+                    textAlign: 'center',
+                    paddingHorizontal: 8,
+                  }
+                ]}>
+                  Go to Settings → Privacy & Security → Health → CoS
+                </Text>
+              </View>
+            </Card>
           ) : (
-            <View style={styles.healthMetricsGrid}>
-              <View style={styles.healthMetricItem}>
-                <View style={styles.healthMetricIconContainer}>
-                  <List.Icon icon="walk" color="#0a7ea4" />
-                </View>
-                <View style={styles.healthMetricContent}>
-                  <Text style={[
-                    styles.healthMetricValue,
-                    {
-                      fontSize: getScaledFontSize(20),
-                      fontWeight: getScaledFontWeight(700) as any,
-                      color: colors.text,
-                    }
-                  ]}>
-                    {healthMetrics.steps.toLocaleString()}
-                  </Text>
-                  <Text style={[
-                    styles.healthMetricLabel,
-                    {
-                      fontSize: getScaledFontSize(12),
-                      fontWeight: getScaledFontWeight(400) as any,
-                      color: colors.text + '80',
-                    }
-                  ]}>
-                    Steps
-                  </Text>
-                </View>
-              </View>
+            // Show health metrics if we have data
+            (healthMetrics.steps > 0 ||
+             healthMetrics.heartRate !== null ||
+             healthMetrics.sleepHours > 0 ||
+             healthMetrics.caloriesBurned > 0) && (
+              <Card style={[styles.healthMetricsCard, { backgroundColor: colors.background }]}>
+                <Text style={[
+                  styles.healthMetricsTitle,
+                  {
+                    fontSize: getScaledFontSize(16),
+                    fontWeight: getScaledFontWeight(600) as any,
+                    color: colors.text,
+                    marginBottom: 16,
+                  }
+                ]}>
+                  Today's Health Metrics
+                </Text>
+                
+                <View style={styles.healthMetricsGrid}>
+                {/* Steps - Only show if steps > 0 */}
+                {healthMetrics.steps > 0 && (
+                  <View style={styles.healthMetricItem}>
+                    <View style={styles.healthMetricIconContainer}>
+                      <List.Icon icon="walk" color="#0a7ea4" />
+                    </View>
+                    <View style={styles.healthMetricContent}>
+                      <Text style={[
+                        styles.healthMetricValue,
+                        {
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          color: colors.text,
+                        }
+                      ]}>
+                        {healthMetrics.steps.toLocaleString()}
+                      </Text>
+                      <Text style={[
+                        styles.healthMetricLabel,
+                        {
+                          fontSize: getScaledFontSize(12),
+                          fontWeight: getScaledFontWeight(400) as any,
+                          color: colors.text + '80',
+                        }
+                      ]}>
+                        Steps
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              <View style={styles.healthMetricItem}>
-                <View style={styles.healthMetricIconContainer}>
-                  <List.Icon icon="heart" color="#0a7ea4" />
-                </View>
-                <View style={styles.healthMetricContent}>
-                  <Text style={[
-                    styles.healthMetricValue,
-                    {
-                      fontSize: getScaledFontSize(20),
-                      fontWeight: getScaledFontWeight(700) as any,
-                      color: colors.text,
-                    }
-                  ]}>
-                    {healthMetrics.heartRate ? `${Math.round(healthMetrics.heartRate)}` : 'N/A'}
-                  </Text>
-                  <Text style={[
-                    styles.healthMetricLabel,
-                    {
-                      fontSize: getScaledFontSize(12),
-                      fontWeight: getScaledFontWeight(400) as any,
-                      color: colors.text + '80',
-                    }
-                  ]}>
-                    Heart Rate (bpm)
-                  </Text>
-                </View>
-              </View>
+                {/* Heart Rate - Only show if heartRate is not null */}
+                {healthMetrics.heartRate !== null && (
+                  <View style={styles.healthMetricItem}>
+                    <View style={styles.healthMetricIconContainer}>
+                      <List.Icon icon="heart" color="#0a7ea4" />
+                    </View>
+                    <View style={styles.healthMetricContent}>
+                      <Text style={[
+                        styles.healthMetricValue,
+                        {
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          color: colors.text,
+                        }
+                      ]}>
+                        {Math.round(healthMetrics.heartRate)}
+                      </Text>
+                      <Text style={[
+                        styles.healthMetricLabel,
+                        {
+                          fontSize: getScaledFontSize(12),
+                          fontWeight: getScaledFontWeight(400) as any,
+                          color: colors.text + '80',
+                        }
+                      ]}>
+                        Heart Rate (bpm)
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              <View style={styles.healthMetricItem}>
-                <View style={styles.healthMetricIconContainer}>
-                  <List.Icon icon="sleep" color="#0a7ea4" />
-                </View>
-                <View style={styles.healthMetricContent}>
-                  <Text style={[
-                    styles.healthMetricValue,
-                    {
-                      fontSize: getScaledFontSize(20),
-                      fontWeight: getScaledFontWeight(700) as any,
-                      color: colors.text,
-                    }
-                  ]}>
-                    {healthMetrics.sleepHours}h
-                  </Text>
-                  <Text style={[
-                    styles.healthMetricLabel,
-                    {
-                      fontSize: getScaledFontSize(12),
-                      fontWeight: getScaledFontWeight(400) as any,
-                      color: colors.text + '80',
-                    }
-                  ]}>
-                    Sleep
-                  </Text>
-                </View>
-              </View>
+                {/* Sleep - Only show if sleepHours > 0 */}
+                {healthMetrics.sleepHours > 0 && (
+                  <View style={styles.healthMetricItem}>
+                    <View style={styles.healthMetricIconContainer}>
+                      <List.Icon icon="sleep" color="#0a7ea4" />
+                    </View>
+                    <View style={styles.healthMetricContent}>
+                      <Text style={[
+                        styles.healthMetricValue,
+                        {
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          color: colors.text,
+                        }
+                      ]}>
+                        {healthMetrics.sleepHours}h
+                      </Text>
+                      <Text style={[
+                        styles.healthMetricLabel,
+                        {
+                          fontSize: getScaledFontSize(12),
+                          fontWeight: getScaledFontWeight(400) as any,
+                          color: colors.text + '80',
+                        }
+                      ]}>
+                        Sleep
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              <View style={styles.healthMetricItem}>
-                <View style={styles.healthMetricIconContainer}>
-                  <List.Icon icon="fire" color="#0a7ea4" />
+                {/* Calories - Only show if caloriesBurned > 0 */}
+                {healthMetrics.caloriesBurned > 0 && (
+                  <View style={styles.healthMetricItem}>
+                    <View style={styles.healthMetricIconContainer}>
+                      <List.Icon icon="fire" color="#0a7ea4" />
+                    </View>
+                    <View style={styles.healthMetricContent}>
+                      <Text style={[
+                        styles.healthMetricValue,
+                        {
+                          fontSize: getScaledFontSize(20),
+                          fontWeight: getScaledFontWeight(700) as any,
+                          color: colors.text,
+                        }
+                      ]}>
+                        {healthMetrics.caloriesBurned.toLocaleString()}
+                      </Text>
+                      <Text style={[
+                        styles.healthMetricLabel,
+                        {
+                          fontSize: getScaledFontSize(12),
+                          fontWeight: getScaledFontWeight(400) as any,
+                          color: colors.text + '80',
+                        }
+                      ]}>
+                        Calories
+                      </Text>
+                    </View>
+                  </View>
+                )}
                 </View>
-                <View style={styles.healthMetricContent}>
-                  <Text style={[
-                    styles.healthMetricValue,
-                    {
-                      fontSize: getScaledFontSize(20),
-                      fontWeight: getScaledFontWeight(700) as any,
-                      color: colors.text,
-                    }
-                  ]}>
-                    {healthMetrics.caloriesBurned.toLocaleString()}
-                  </Text>
-                  <Text style={[
-                    styles.healthMetricLabel,
-                    {
-                      fontSize: getScaledFontSize(12),
-                      fontWeight: getScaledFontWeight(400) as any,
-                      color: colors.text + '80',
-                    }
-                  ]}>
-                    Calories
-                  </Text>
-                </View>
-              </View>
-            </View>
-          )}
-        </Card>
+              </Card>
+            )
+          )
+        )}
 
         {/* Progress Section */}
         <Card style={[styles.progressCard]}>
@@ -582,6 +737,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 16,
+  },
+  permissionErrorContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    width: '100%',
+  },
+  permissionErrorText: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  permissionButton: {
+    borderRadius: 8,
+    minWidth: 200,
+    alignSelf: 'center',
+  },
+  permissionHintText: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   healthMetricsText: {
     fontSize: 14,
