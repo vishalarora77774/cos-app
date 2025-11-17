@@ -279,10 +279,13 @@ export default function TodayScheduleScreen() {
                   styles.permissionErrorText,
                   {
                     fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(600) as any,
                     color: colors.text + 'CC',
                     marginBottom: getScaledFontSize(16),
                     textAlign: 'center',
                     paddingHorizontal: 8,
+                    paddingTop: getScaledFontSize(8),
+                    paddingBottom: getScaledFontSize(4),
                   }
                 ]}>
                   Health data access is required to display your activity metrics.
@@ -296,7 +299,7 @@ export default function TodayScheduleScreen() {
                       marginVertical: getScaledFontSize(8),
                     }
                   ]}
-                  buttonColor="#0a7ea4"
+                  buttonColor="#008080"
                   textColor="#ffffff"
                   labelStyle={{
                     fontSize: getScaledFontSize(14),
@@ -312,11 +315,14 @@ export default function TodayScheduleScreen() {
                 <Text style={[
                   styles.permissionHintText,
                   {
-                    fontSize: getScaledFontSize(12),
+                    fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(600) as any,
                     color: colors.text + '80',
                     marginTop: getScaledFontSize(12),
                     textAlign: 'center',
                     paddingHorizontal: 8,
+                    paddingTop: getScaledFontSize(4),
+                    paddingBottom: getScaledFontSize(8),
                   }
                 ]}>
                   Go to Settings → Privacy & Security → Health → CoS
@@ -347,7 +353,7 @@ export default function TodayScheduleScreen() {
                 {healthMetrics.steps > 0 && (
                   <View style={styles.healthMetricItem}>
                     <View style={styles.healthMetricIconContainer}>
-                      <List.Icon icon="walk" color="#0a7ea4" />
+                      <List.Icon icon="walk" color="#008080" />
                     </View>
                     <View style={styles.healthMetricContent}>
                       <Text style={[
@@ -378,7 +384,7 @@ export default function TodayScheduleScreen() {
                 {healthMetrics.heartRate !== null && (
                   <View style={styles.healthMetricItem}>
                     <View style={styles.healthMetricIconContainer}>
-                      <List.Icon icon="heart" color="#0a7ea4" />
+                      <List.Icon icon="heart" color="#008080" />
                     </View>
                     <View style={styles.healthMetricContent}>
                       <Text style={[
@@ -409,7 +415,7 @@ export default function TodayScheduleScreen() {
                 {healthMetrics.sleepHours > 0 && (
                   <View style={styles.healthMetricItem}>
                     <View style={styles.healthMetricIconContainer}>
-                      <List.Icon icon="sleep" color="#0a7ea4" />
+                      <List.Icon icon="sleep" color="#008080" />
                     </View>
                     <View style={styles.healthMetricContent}>
                       <Text style={[
@@ -440,7 +446,7 @@ export default function TodayScheduleScreen() {
                 {healthMetrics.caloriesBurned > 0 && (
                   <View style={styles.healthMetricItem}>
                     <View style={styles.healthMetricIconContainer}>
-                      <List.Icon icon="fire" color="#0a7ea4" />
+                      <List.Icon icon="fire" color="#008080" />
                     </View>
                     <View style={styles.healthMetricContent}>
                       <Text style={[
@@ -534,7 +540,7 @@ export default function TodayScheduleScreen() {
                   styles.taskCard, 
                   { 
                     borderLeftWidth: 4,
-                    borderLeftColor: '#0a7ea4'
+                    borderLeftColor: '#008080'
                   }
                 ]}
               >
@@ -542,7 +548,7 @@ export default function TodayScheduleScreen() {
                 <View style={styles.taskLeft}>
                   <List.Icon 
                     icon={task.icon} 
-                    color={'#0a7ea4'}
+                    color={'#008080'}
                   />
                   <View style={styles.taskDetails}>
                     <Text style={[
@@ -584,13 +590,13 @@ export default function TodayScheduleScreen() {
                 {task.completed ? (
                   <IconButton 
                     icon="check-circle" 
-                    iconColor={'#0a7ea4'} 
+                    iconColor={'#008080'} 
                     size={28}
                   />
                 ) : (
                   <IconButton 
                     icon="circle-outline" 
-                    iconColor={'#0a7ea4'}
+                    iconColor={'#008080'}
                     size={28}
                   />
                 )}
@@ -681,7 +687,7 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: '#0a7ea4'
+    backgroundColor: '#008080'
   },
   progressText: {
     fontSize: 14,
@@ -740,13 +746,15 @@ const styles = StyleSheet.create({
   },
   permissionErrorContainer: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 4,
     width: '100%',
   },
   permissionErrorText: {
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+    includeFontPadding: true, // Android: include font padding to prevent cutoff
   },
   permissionButton: {
     borderRadius: 8,
@@ -756,7 +764,8 @@ const styles = StyleSheet.create({
   permissionHintText: {
     fontSize: 12,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
+    includeFontPadding: true, // Android: include font padding to prevent cutoff
   },
   healthMetricsText: {
     fontSize: 14,
