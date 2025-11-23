@@ -166,14 +166,28 @@ export default function TodayScheduleScreen() {
   const openHealthSettings = async () => {
     try {
       if (Platform.OS === 'ios') {
-        // Open the app's settings page (user can navigate to Health from there)
-        await Linking.openURL('app-settings:');
+        // Open Health privacy settings page (Privacy & Security > Health)
+        // User can then select CoS from the list
+        const healthSettingsUrl = 'App-Prefs:root=Privacy&path=HEALTH';
+        const canOpen = await Linking.canOpenURL(healthSettingsUrl);
+        if (canOpen) {
+          await Linking.openURL(healthSettingsUrl);
+        } else {
+          // Fallback to app settings if Health settings URL doesn't work
+          await Linking.openURL('app-settings:');
+        }
       } else {
         // For Android, open app settings
         await Linking.openSettings();
       }
     } catch (error) {
       console.error('Error opening settings:', error);
+      // Fallback to app settings if Health settings URL fails
+      try {
+        await Linking.openURL('app-settings:');
+      } catch (fallbackError) {
+        console.error('Error opening fallback settings:', fallbackError);
+      }
     }
   };
 

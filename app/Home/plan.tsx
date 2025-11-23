@@ -1,14 +1,15 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import { generateHealthSuggestions, AISuggestion, HealthSummary, MedicalReport, Appointment, DoctorDiagnosis } from '@/services/openai';
+import { generateHealthSuggestions, AISuggestion, HealthSummary, MedicalReport, Appointment, DoctorDiagnosis, HealthMetricsData } from '@/services/openai';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button, Icon } from 'react-native-paper';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HealthMetricCard } from '@/components/ui/health-metric-card';
 import { GrowthChart, DataPoint } from '@/components/ui/growth-chart';
 import { TreatmentProgress, TreatmentGoal } from '@/components/ui/treatment-progress';
+import { initializeHealthKit, getTodayHealthMetrics, HealthMetrics } from '@/services/health';
 
 // Mock health data - In a real app, this would come from your API
 const getMockHealthData = (): HealthSummary => ({
@@ -160,6 +161,9 @@ export default function PlanScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [healthData, setHealthData] = useState<HealthSummary | null>(null);
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetricsData | null>(null);
+  const [hasAskedAboutHealthData, setHasAskedAboutHealthData] = useState(false);
+  const [isRequestingPermissions, setIsRequestingPermissions] = useState(false);
 
   // Parse medical reports to extract metrics for visualization
   const parsedMetrics = useMemo(() => {
@@ -254,6 +258,92 @@ export default function PlanScreen() {
     };
   }, [healthData]);
 
+  // Ask user if they want to include health data
+  const askAboutHealthData = useCallback((): Promise<HealthMetricsData | null> => {
+    return new Promise((resolve) => {
+      if (hasAskedAboutHealthData) {
+        resolve(healthMetrics);
+        return;
+      }
+
+      if (Platform.OS !== 'ios') {
+        // HealthKit is only available on iOS
+        setHasAskedAboutHealthData(true);
+        resolve(null);
+        return;
+      }
+
+      Alert.alert(
+        'Include Health App Data?',
+        'Would you like to include your Health app data (steps, sleep, calories, and heart rate) in the AI analysis? This can provide more personalized insights.',
+        [
+          {
+            text: 'No Thanks',
+            style: 'cancel',
+            onPress: () => {
+              setHasAskedAboutHealthData(true);
+              resolve(null);
+            },
+          },
+          {
+            text: 'Yes, Include It',
+            onPress: async () => {
+              setHasAskedAboutHealthData(true);
+              setIsRequestingPermissions(true);
+              try {
+                // Initialize HealthKit and request permissions
+                await initializeHealthKit();
+                
+                // Fetch health metrics
+                const metrics = await getTodayHealthMetrics();
+                
+                if (metrics.error) {
+                  // Permissions were denied or error occurred
+                  console.log('❌ Health metrics error:', metrics.error);
+                  setHealthMetrics(null);
+                  resolve(null);
+                } else {
+                  // Successfully fetched health metrics
+                  const healthData: HealthMetricsData = {
+                    steps: metrics.steps,
+                    heartRate: metrics.heartRate,
+                    sleepHours: metrics.sleepHours,
+                    caloriesBurned: metrics.caloriesBurned,
+                  };
+                  
+                  // Log the fetched health data
+                  console.log('✅ Health metrics fetched successfully:', {
+                    steps: healthData.steps,
+                    heartRate: healthData.heartRate,
+                    sleepHours: healthData.sleepHours,
+                    caloriesBurned: healthData.caloriesBurned,
+                    hasData: healthData.steps > 0 || healthData.heartRate !== null || healthData.sleepHours > 0 || healthData.caloriesBurned > 0,
+                  });
+                  
+                  setHealthMetrics(healthData);
+                  resolve(healthData);
+                }
+              } catch (err) {
+                console.error('Error fetching health metrics:', err);
+                setHealthMetrics(null);
+                resolve(null);
+              } finally {
+                setIsRequestingPermissions(false);
+              }
+            },
+          },
+        ],
+        { 
+          cancelable: true,
+          onDismiss: () => {
+            setHasAskedAboutHealthData(true);
+            resolve(null);
+          },
+        }
+      );
+    });
+  }, [hasAskedAboutHealthData, healthMetrics]);
+
   const loadAISuggestions = useCallback(async (isRefresh = false) => {
     try {
       console.log('loadAISuggestions called, isRefresh:', isRefresh);
@@ -265,11 +355,32 @@ export default function PlanScreen() {
         setIsLoading(true);
       }
       setError(null);
+      
+      // Ask about health data on first load and wait for response
+      let metricsToUse = healthMetrics;
+      if (!hasAskedAboutHealthData && !isRefresh) {
+        metricsToUse = await askAboutHealthData();
+      }
+      
       const mockHealthData = getMockHealthData();
       setHealthData(mockHealthData);
-      console.log('Calling generateHealthSuggestions with isRefresh:', isRefresh);
-      // Pass isRefresh flag to get fresh, varied responses on each refresh
-      const suggestion = await generateHealthSuggestions(mockHealthData, isRefresh);
+      
+      // Log health metrics being sent to OpenAI
+      if (metricsToUse) {
+        console.log('📊 Sending health metrics to OpenAI:', {
+          steps: metricsToUse.steps,
+          heartRate: metricsToUse.heartRate,
+          sleepHours: metricsToUse.sleepHours,
+          caloriesBurned: metricsToUse.caloriesBurned,
+          hasMeaningfulData: metricsToUse.steps > 0 || metricsToUse.heartRate !== null || metricsToUse.sleepHours > 0 || metricsToUse.caloriesBurned > 0,
+        });
+      } else {
+        console.log('📊 No health metrics to send to OpenAI');
+      }
+      
+      console.log('Calling generateHealthSuggestions with isRefresh:', isRefresh, 'healthMetrics:', metricsToUse);
+      // Pass isRefresh flag and health metrics to get fresh, varied responses on each refresh
+      const suggestion = await generateHealthSuggestions(mockHealthData, isRefresh, metricsToUse);
       console.log('Received suggestion from OpenAI:', suggestion);
       // Replace content with fresh AI-generated response
       setAiSuggestion(suggestion);
@@ -285,7 +396,7 @@ export default function PlanScreen() {
       setIsRefreshing(false);
       console.log('loadAISuggestions completed');
     }
-  }, []);
+  }, [hasAskedAboutHealthData, askAboutHealthData, healthMetrics]);
 
   useEffect(() => {
     loadAISuggestions();
@@ -312,9 +423,7 @@ export default function PlanScreen() {
           }
         >
         {/* AI Health Summary Section - Senior-Friendly Design */}
-        <View style={[styles.aiSection, { 
-          backgroundColor: settings.isDarkTheme ? '#1a1a1a' : '#ffffff',
-        }]}>
+        <View style={styles.aiSection}>
           <View style={styles.aiSectionContent}>
           <View style={styles.aiHeader}>
               <View style={[styles.iconContainer, { backgroundColor: settings.isDarkTheme ? '#2a2a2a' : '#e8f4f8' }]}>
@@ -341,6 +450,9 @@ export default function PlanScreen() {
                   }
                 ]}>
                   AI-powered insights based on your treatment plan
+                  {healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0) && (
+                    <Text style={{ color: colors.tint, fontWeight: getScaledFontWeight(600) as any }}> • Includes Health App data</Text>
+                  )}
                 </Text>
               </View>
             </View>
@@ -443,9 +555,6 @@ export default function PlanScreen() {
                     </Text>
                   </View>
                   <View style={[styles.summaryContent, { 
-                    backgroundColor: settings.isDarkTheme ? '#252525' : '#f9f9f9',
-                    borderRadius: 12,
-                    padding: getScaledFontSize(16),
                     marginTop: getScaledFontSize(12),
                   }]}>
                     <Text style={[
@@ -484,10 +593,7 @@ export default function PlanScreen() {
                     <View style={styles.listContainer}>
                       {aiSuggestion.keyPoints.map((point, index) => (
                         <View key={index} style={[styles.listItem, {
-                          backgroundColor: settings.isDarkTheme ? '#252525' : '#f9f9f9',
-                          borderRadius: 12,
-                          padding: getScaledFontSize(14),
-                          marginBottom: getScaledFontSize(10),
+                          marginBottom: getScaledFontSize(8),
                         }]}>
                           <View style={[styles.bulletPoint, { backgroundColor: colors.tint }]}>
                             <Text style={[styles.bulletNumber, {
@@ -539,10 +645,7 @@ export default function PlanScreen() {
                     <View style={styles.listContainer}>
                       {aiSuggestion.recommendations.map((rec, index) => (
                         <View key={index} style={[styles.listItem, {
-                          backgroundColor: settings.isDarkTheme ? '#252525' : '#f9f9f9',
-                          borderRadius: 12,
-                          padding: getScaledFontSize(14),
-                          marginBottom: getScaledFontSize(10),
+                          marginBottom: getScaledFontSize(8),
                         }]}>
                           <View style={[styles.recommendationIcon, { backgroundColor: colors.tint }]}>
                             <Icon source="arrow-right" size={getScaledFontSize(20)} color="#fff" />
@@ -727,10 +830,7 @@ export default function PlanScreen() {
 
                 {/* Warnings Section */}
                 {aiSuggestion.warnings.length > 0 && (
-                  <View style={[styles.suggestionBlock, styles.warningBlock, {
-                    backgroundColor: settings.isDarkTheme ? '#3a241a' : '#fff3cd',
-                    borderColor: settings.isDarkTheme ? '#ff6b6b' : '#ffc107',
-                  }]}>
+                  <View style={styles.suggestionBlock}>
                     <View style={styles.blockHeader}>
                       <View style={[styles.blockIconContainer, { backgroundColor: settings.isDarkTheme ? '#4a1a1a' : '#ffeb3b' }]}>
                         <Icon source="alert" size={getScaledFontSize(32)} color="#ff4444" />
@@ -750,12 +850,10 @@ export default function PlanScreen() {
                     <View style={styles.listContainer}>
                       {aiSuggestion.warnings.map((warning, index) => (
                         <View key={index} style={[styles.listItem, {
-                          backgroundColor: settings.isDarkTheme ? '#2a1a1a' : '#fff9c4',
-                          borderRadius: 12,
-                          padding: getScaledFontSize(14),
-                          marginBottom: getScaledFontSize(10),
+                          marginBottom: getScaledFontSize(8),
                           borderLeftWidth: 4,
                           borderLeftColor: '#ff4444',
+                          paddingLeft: getScaledFontSize(12),
                         }]}>
                           <Icon source="alert-circle" size={getScaledFontSize(28)} color="#ff4444" />
                           <Text style={[
@@ -818,29 +916,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingTop: 60,
     flexGrow: 1,
   },
   visualizationSection: {
-    marginBottom: 24,
-    padding: 24,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    borderRadius: 24,
+    marginBottom: 16,
+    padding: 0,
   },
   aiSection: {
-    marginBottom: 24,
-    padding: 24,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    borderRadius: 24,
+    marginBottom: 0,
+    padding: 0,
     position: 'relative',
   },
   aiSectionContent: {
@@ -858,8 +944,8 @@ const styles = StyleSheet.create({
   aiHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 28,
-    paddingBottom: 20,
+    marginBottom: 20,
+    paddingBottom: 16,
   },
   iconContainer: {
     width: 64,
@@ -957,23 +1043,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   suggestionBlock: {
-    marginBottom: 8,
+    marginBottom: 20,
   },
   summaryBlock: {
-    marginBottom: 4,
+    marginBottom: 0,
   },
   summaryContent: {
     marginTop: 12,
   },
-  warningBlock: {
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-  },
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   blockIconContainer: {
     width: 48,

@@ -59,6 +59,13 @@ export interface AISuggestion {
   warnings: string[];
 }
 
+export interface HealthMetricsData {
+  steps: number;
+  heartRate: number | null;
+  sleepHours: number;
+  caloriesBurned: number;
+}
+
 function getRandomValue(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -67,10 +74,12 @@ function getRandomValue(min: number, max: number): number {
  * Generates AI-powered health suggestions based on treatment plan, medical reports, and medications
  * @param healthData - The health summary data
  * @param isRefresh - Whether this is a refresh call (increases temperature for more variation)
+ * @param healthMetrics - Optional health metrics from HealthKit (steps, heart rate, sleep, calories)
  */
 export async function generateHealthSuggestions(
   healthData: HealthSummary,
-  isRefresh: boolean = false
+  isRefresh: boolean = false,
+  healthMetrics?: HealthMetricsData | null
 ): Promise<AISuggestion> {
   if (!OPENAI_API_KEY) {
     console.error('OpenAI API key is missing. Please set EXPO_PUBLIC_OPEN_AI_PUBLIC_KEY in your .env file.');
@@ -78,6 +87,13 @@ export async function generateHealthSuggestions(
   }
 
   console.log('Calling OpenAI API with model: gpt-4o-mini');
+  console.log('📊 Health metrics received:', healthMetrics ? {
+    steps: healthMetrics.steps,
+    heartRate: healthMetrics.heartRate,
+    sleepHours: healthMetrics.sleepHours,
+    caloriesBurned: healthMetrics.caloriesBurned,
+    hasData: healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0,
+  } : 'null');
 
   // Sort appointments and diagnoses by date (most recent first)
   const sortedAppointments = healthData.appointments 
@@ -156,14 +172,30 @@ ${previousDiagnoses.map(diag => `
 ` : ''}
 ` : ''}
 
+${healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0) ? `
+HEALTH APP DATA (Today's Activity from Apple Health):
+- Steps: ${healthMetrics.steps.toLocaleString()} steps
+- Heart Rate: ${healthMetrics.heartRate ? `${healthMetrics.heartRate} bpm` : 'Not available'}
+- Sleep: ${healthMetrics.sleepHours.toFixed(1)} hours
+- Calories Burned: ${healthMetrics.caloriesBurned.toLocaleString()} calories
+
+IMPORTANT: You MUST incorporate this activity data into your analysis. This real-time health data provides crucial insights into the patient's daily activity levels, exercise patterns, sleep quality, and overall physical health. 
+- Analyze how their activity levels (steps, calories) relate to their treatment plan and medical conditions
+- Consider sleep duration in relation to their health goals and recovery
+- If heart rate data is available, note any patterns or concerns
+- Provide specific recommendations based on this activity data
+- Mention these metrics in your summary and recommendations where relevant
+` : ''}
+
 Please provide:
 1. A brief, easy-to-understand summary (6-9 sentences) in simple language that:
    - Incorporates information from all doctors, appointments, and diagnoses
+   - ${healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0) ? 'MUST include insights from the Health App data (steps, sleep, calories, heart rate) and how it relates to their treatment plan' : ''}
    - Analyzes the progression of diagnoses over time (comparing current vs previous diagnoses)
    - Identifies trends and improvements or concerns based on appointment history
    - Considers how different specialists' diagnoses relate to each other
-2. 3-5 key points the patient should remember (each point should be one simple sentence, focusing on important insights from diagnoses and appointments)
-3. 5-7 specific recommendations for daily care (each recommendation should be actionable and clear, incorporating treatment recommendations from diagnoses)
+2. 3-5 key points the patient should remember (each point should be one simple sentence, focusing on important insights from diagnoses, appointments${healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0) ? ', and activity data' : ''})
+3. 5-7 specific recommendations for daily care (each recommendation should be actionable and clear, incorporating treatment recommendations from diagnoses${healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0) ? ' and activity levels from Health App data' : ''})
 4. Any important warnings or precautions based on diagnosis trends, appointment findings, or conflicting information between different doctors (if applicable, otherwise return an empty array)
 
 ${isRefresh ? 'Note: This is an updated analysis request. Please provide fresh insights and potentially new perspectives on the patient\'s health information.' : ''}
@@ -184,6 +216,14 @@ Format your response as a JSON object with these exact keys:
 }
 
 Important: Use simple, clear language appropriate for elderly patients. Avoid medical jargon. Make sure to analyze and incorporate insights from both current and previous diagnoses, as well as the complete appointment history.`;
+
+  // Log a snippet of the prompt to verify health data is included
+  const hasHealthData = healthMetrics && (healthMetrics.steps > 0 || healthMetrics.heartRate !== null || healthMetrics.sleepHours > 0 || healthMetrics.caloriesBurned > 0);
+  console.log('📝 Prompt includes health data:', hasHealthData);
+  if (hasHealthData) {
+    const healthDataSection = prompt.match(/HEALTH APP DATA[\s\S]*?IMPORTANT:[\s\S]*?activity data/);
+    console.log('📝 Health data section in prompt:', healthDataSection ? 'Found' : 'NOT FOUND');
+  }
 
   try {
     const response = await fetch(OPENAI_API_URL, {
