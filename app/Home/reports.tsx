@@ -1,0 +1,1091 @@
+import { Colors } from '@/constants/theme';
+import { useAccessibility } from '@/stores/accessibility-store';
+import React, { useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, SafeAreaView } from 'react-native';
+import { Card } from 'react-native-paper';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Checkbox } from 'expo-checkbox';
+
+interface Report {
+  id: number;
+  title: string;
+  category: string;
+  provider: string;
+  date: string;
+  status: 'Available' | 'Pending' | 'Completed';
+  description?: string;
+  fileType?: string;
+  // Detailed report information
+  exam?: string;
+  clinicalHistory?: string;
+  technique?: string;
+  findings?: string;
+  impression?: string;
+  interpretedBy?: string;
+  signedBy?: string;
+  signedOn?: string;
+  accessionNumber?: string;
+  orderNumber?: string;
+  performingFacility?: {
+    name: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    phone?: string;
+  };
+}
+
+export default function Reports() {
+  const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
+  const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const [activeTab, setActiveTab] = useState('all');
+  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+
+  const tabs = [
+    { id: 'all', label: 'All Reports' },
+    { id: 'lab', label: 'Lab Reports' },
+    { id: 'imaging', label: 'Imaging' },
+    { id: 'medical', label: 'Medical Records' },
+    { id: 'pathology', label: 'Pathology' },
+  ];
+
+  const providers = [
+    'City Hospital',
+    'Metro Medical Center',
+    'Regional Lab',
+    'Imaging Associates',
+    'Pathology Lab',
+  ];
+
+  const categories = [
+    'Lab Reports',
+    'Imaging',
+    'Medical Records',
+    'Pathology',
+    'Radiology',
+  ];
+
+  const allReports: Report[] = [
+    {
+      id: 1,
+      title: 'Complete Blood Count (CBC)',
+      category: 'Lab Reports',
+      provider: 'City Hospital',
+      date: 'Nov 20, 2024',
+      status: 'Available',
+      description: 'Complete blood count with differential',
+      fileType: 'PDF',
+      exam: 'Complete Blood Count (CBC) with Differential',
+      clinicalHistory: 'Routine health screening',
+      technique: 'Automated hematology analyzer',
+      findings: 'White blood cell count: 7.2 x 10^3/μL (normal range: 4.0-11.0). Red blood cell count: 4.8 x 10^6/μL (normal range: 4.5-5.5). Hemoglobin: 14.2 g/dL (normal range: 13.5-17.5). Hematocrit: 42.5% (normal range: 40-50%). Platelet count: 250 x 10^3/μL (normal range: 150-450). Differential shows normal distribution of white blood cells.',
+      impression: 'Complete blood count is within normal limits. No abnormalities detected.',
+      interpretedBy: 'Dr. Sarah Johnson, M.D.',
+      signedBy: 'Dr. Sarah Johnson, M.D.',
+      signedOn: '2024-11-20 10:30 AM',
+      accessionNumber: '80051608CBC',
+      orderNumber: '2073447967',
+      performingFacility: {
+        name: 'City Hospital Laboratory',
+        address: '123 Medical Center Dr',
+        city: 'San Francisco',
+        state: 'California',
+        zip: '94102',
+        phone: '415-555-0100',
+      },
+    },
+    {
+      id: 2,
+      title: 'Chest X-Ray',
+      category: 'Imaging',
+      provider: 'Metro Medical Center',
+      date: 'Nov 18, 2024',
+      status: 'Available',
+      description: 'Chest X-ray frontal and lateral views',
+      fileType: 'DICOM',
+      exam: 'Chest X-Ray (PA and Lateral)',
+      clinicalHistory: 'Evaluation for chest pain and shortness of breath',
+      technique: 'Frontal (PA) and lateral chest radiographs',
+      findings: 'The heart is normal in size and configuration. The mediastinal contours are within normal limits. The lungs are clear bilaterally without evidence of acute infiltrates, consolidation, or pleural effusion. The bony structures are intact. No acute cardiopulmonary abnormalities.',
+      impression: 'Normal chest X-ray. No acute abnormalities identified.',
+      interpretedBy: 'Dr. Michael Chen, M.D.',
+      signedBy: 'Dr. Michael Chen, M.D.',
+      signedOn: '2024-11-18 2:15 PM',
+      accessionNumber: '80051608CXR',
+      orderNumber: '2073447968',
+      performingFacility: {
+        name: 'Metro Medical Center Radiology',
+        address: '456 Health Parkway',
+        city: 'San Francisco',
+        state: 'California',
+        zip: '94103',
+        phone: '415-555-0200',
+      },
+    },
+    {
+      id: 3,
+      title: 'MRI Brain',
+      category: 'Imaging',
+      provider: 'Imaging Associates',
+      date: 'Nov 15, 2024',
+      status: 'Available',
+      description: 'MRI brain with contrast',
+      fileType: 'DICOM',
+      exam: 'MRI Brain with and without Contrast',
+      clinicalHistory: 'Evaluation for headaches and dizziness',
+      technique: 'Sagittal, axial, and coronal T1-weighted, T2-weighted, FLAIR, and post-contrast T1-weighted sequences',
+      findings: 'The brain parenchyma demonstrates normal signal intensity. No evidence of mass effect, hemorrhage, or acute infarction. The ventricles and sulci are normal in size and configuration. The posterior fossa structures are unremarkable. No abnormal enhancement is identified following contrast administration. The visualized skull base and calvarium are intact.',
+      impression: 'Normal MRI brain with contrast. No acute intracranial abnormalities.',
+      interpretedBy: 'Dr. Emily Davis, M.D.',
+      signedBy: 'Dr. Emily Davis, M.D.',
+      signedOn: '2024-11-15 11:45 AM',
+      accessionNumber: '80051608MRI',
+      orderNumber: '2073447969',
+      performingFacility: {
+        name: 'Imaging Associates',
+        address: '789 Diagnostic Blvd',
+        city: 'San Francisco',
+        state: 'California',
+        zip: '94104',
+        phone: '415-555-0300',
+      },
+    },
+    {
+      id: 4,
+      title: 'Lipid Panel',
+      category: 'Lab Reports',
+      provider: 'Regional Lab',
+      date: 'Nov 12, 2024',
+      status: 'Available',
+      description: 'Cholesterol and triglyceride levels',
+      fileType: 'PDF',
+      exam: 'Lipid Panel (Complete)',
+      clinicalHistory: 'Routine cholesterol screening',
+      technique: 'Enzymatic colorimetric assay',
+      findings: 'Total Cholesterol: 185 mg/dL (normal range: <200). HDL Cholesterol: 55 mg/dL (normal range: >40). LDL Cholesterol: 110 mg/dL (normal range: <100). Triglycerides: 150 mg/dL (normal range: <150). Cholesterol/HDL Ratio: 3.4 (normal range: <5.0).',
+      impression: 'Lipid panel shows mildly elevated LDL cholesterol. HDL cholesterol is within normal limits. Overall cardiovascular risk is low.',
+      interpretedBy: 'Dr. James Wilson, M.D.',
+      signedBy: 'Dr. James Wilson, M.D.',
+      signedOn: '2024-11-12 9:15 AM',
+      accessionNumber: '80051608LIP',
+      orderNumber: '2073447970',
+      performingFacility: {
+        name: 'Regional Lab',
+        address: '321 Laboratory Way',
+        city: 'San Francisco',
+        state: 'California',
+        zip: '94105',
+        phone: '415-555-0400',
+      },
+    },
+    {
+      id: 5,
+      title: 'Biopsy Report',
+      category: 'Pathology',
+      provider: 'Pathology Lab',
+      date: 'Nov 10, 2024',
+      status: 'Available',
+      description: 'Tissue biopsy analysis',
+      fileType: 'PDF',
+    },
+    {
+      id: 6,
+      title: 'CT Scan Abdomen',
+      category: 'Imaging',
+      provider: 'Metro Medical Center',
+      date: 'Nov 8, 2024',
+      status: 'Available',
+      description: 'CT scan of abdomen and pelvis',
+      fileType: 'DICOM',
+    },
+    {
+      id: 7,
+      title: 'Blood Glucose Test',
+      category: 'Lab Reports',
+      provider: 'City Hospital',
+      date: 'Nov 5, 2024',
+      status: 'Available',
+      description: 'Fasting blood glucose levels',
+      fileType: 'PDF',
+    },
+    {
+      id: 8,
+      title: 'Medical History Summary',
+      category: 'Medical Records',
+      provider: 'City Hospital',
+      date: 'Nov 1, 2024',
+      status: 'Available',
+      description: 'Complete medical history documentation',
+      fileType: 'PDF',
+    },
+    {
+      id: 9,
+      title: 'Ultrasound Abdomen',
+      category: 'Imaging',
+      provider: 'Imaging Associates',
+      date: 'Oct 28, 2024',
+      status: 'Available',
+      description: 'Abdominal ultrasound examination',
+      fileType: 'DICOM',
+    },
+    {
+      id: 10,
+      title: 'Thyroid Function Test',
+      category: 'Lab Reports',
+      provider: 'Regional Lab',
+      date: 'Oct 25, 2024',
+      status: 'Available',
+      description: 'TSH, T3, T4 levels',
+      fileType: 'PDF',
+    },
+  ];
+
+  const categoryMap: { [key: string]: string } = {
+    all: 'All Reports',
+    lab: 'Lab Reports',
+    imaging: 'Imaging',
+    medical: 'Medical Records',
+    pathology: 'Pathology',
+  };
+
+  const toggleProvider = (provider: string) => {
+    setSelectedProviders(prev =>
+      prev.includes(provider)
+        ? prev.filter(p => p !== provider)
+        : [...prev, provider]
+    );
+  };
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories(prev =>
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const renderFilterModal = (
+    visible: boolean,
+    onClose: () => void,
+    title: string,
+    options: string[],
+    selectedItems: string[],
+    onToggle: (item: string) => void
+  ) => (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        <View style={styles.modalHeader}>
+          <Text style={[styles.modalTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
+            {title}
+          </Text>
+          <TouchableOpacity onPress={onClose}>
+            <MaterialIcons name="close" size={getScaledFontSize(24)} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+        
+        <ScrollView style={styles.modalContent}>
+          {options.map((option) => {
+            const isSelected = selectedItems.includes(option);
+            return (
+              <TouchableOpacity
+                key={option}
+                style={[styles.checkboxRow, { borderBottomColor: colors.text + '20' }]}
+                onPress={() => onToggle(option)}
+              >
+                <Checkbox
+                  value={isSelected}
+                  onValueChange={() => onToggle(option)}
+                  color={isSelected ? '#008080' : undefined}
+                />
+                <Text style={[styles.checkboxLabel, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+
+  const getFilteredReports = () => {
+    let filtered = allReports;
+
+    // Filter by active tab category
+    if (activeTab !== 'all') {
+      const categoryName = categoryMap[activeTab];
+      filtered = filtered.filter(report => report.category === categoryName);
+    }
+
+    // Filter by selected providers
+    if (selectedProviders.length > 0) {
+      filtered = filtered.filter(report => selectedProviders.includes(report.provider));
+    }
+
+    // Filter by selected categories
+    if (selectedCategories.length > 0) {
+      filtered = filtered.filter(report => selectedCategories.includes(report.category));
+    }
+
+    return filtered;
+  };
+
+  const handleTabPress = (tabId: string) => {
+    setActiveTab(tabId);
+    
+    // Auto-scroll to center the active tab
+    const tabIndex = tabs.findIndex(tab => tab.id === tabId);
+    if (tabIndex !== -1 && scrollViewRef.current) {
+      const tabWidth = 120 + 40; // minWidth + paddingHorizontal * 2
+      const scrollPosition = Math.max(0, (tabIndex * tabWidth) - (tabWidth / 2));
+      
+      scrollViewRef.current.scrollTo({
+        x: scrollPosition,
+        animated: true,
+      });
+    }
+  };
+
+  const filteredReports = getFilteredReports();
+
+  const renderReports = () => (
+    <ScrollView style={styles.tabContent}>
+      {filteredReports.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>
+            No reports found matching your filters
+          </Text>
+        </View>
+      ) : (
+        filteredReports.map((report) => (
+          <Card key={report.id} style={styles.reportCard}>
+            <Card.Content>
+              <View style={styles.reportHeader}>
+                <View style={styles.reportTitleContainer}>
+                  <Text 
+                    style={[styles.reportTitle, {  fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {report.title}
+                  </Text>
+                  <View style={[styles.statusBadge, { backgroundColor: report.status === 'Available' ? '#008080' : report.status === 'Pending' ? '#FF9800' : '#9E9E9E' }]}>
+                    <Text style={[styles.statusText, { fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>
+                      {report.status}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.reportDate, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                  {report.date}
+                </Text>
+              </View>
+              
+              <View style={styles.reportMeta}>
+                <View style={styles.metaItem}>
+                  <MaterialIcons name="local-hospital" size={getScaledFontSize(16)} color="#008080" />
+                  <Text 
+                    style={[styles.metaText, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {report.provider}
+                  </Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <MaterialIcons name="category" size={getScaledFontSize(16)} color="#008080" />
+                  <Text 
+                    style={[styles.metaText, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {report.category}
+                  </Text>
+                </View>
+                {report.fileType && (
+                  <View style={styles.metaItem}>
+                    <MaterialIcons name="description" size={getScaledFontSize(16)} color="#008080" />
+                    <Text style={[styles.metaText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                      {report.fileType}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              
+              {report.description && (
+                <Text 
+                  style={[styles.reportDescription, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(24) }]}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  {report.description}
+                </Text>
+              )}
+              
+              <TouchableOpacity 
+                style={styles.viewButton}
+                onPress={() => {
+                  setSelectedReport(report);
+                  setShowReportModal(true);
+                }}
+              >
+                <Text style={[styles.viewButtonText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                  View Report
+                </Text>
+                <MaterialIcons name="arrow-forward" size={getScaledFontSize(18)} color="#008080" />
+              </TouchableOpacity>
+            </Card.Content>
+          </Card>
+        ))
+      )}
+    </ScrollView>
+  );
+
+  return (
+    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Reports Title Header */}
+      <View style={[styles.header, { backgroundColor: colors.background, paddingTop: insets.top + 24 }]}>
+        <Text style={[styles.reportsTitle, { color: colors.text, fontSize: getScaledFontSize(28), fontWeight: getScaledFontWeight(700) as any }]}>Reports</Text>
+      </View>
+
+      {/* Filters */}
+      <View style={[styles.filtersContainer, { backgroundColor: colors.background }]}>
+        <View style={styles.filterButtonsRow}>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { backgroundColor: colors.background, borderColor: selectedProviders.length > 0 ? '#008080' : '#E0E0E0' },
+            ]}
+            onPress={() => setShowProviderModal(true)}
+          >
+            <MaterialIcons name="local-hospital" size={getScaledFontSize(18)} color="#008080" />
+            <Text style={[styles.filterButtonText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Providers
+              {selectedProviders.length > 0 && ` (${selectedProviders.length})`}
+            </Text>
+            <MaterialIcons name="keyboard-arrow-down" size={getScaledFontSize(20)} color="#008080" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              { backgroundColor: colors.background, borderColor: selectedCategories.length > 0 ? '#008080' : '#E0E0E0' },
+            ]}
+            onPress={() => setShowCategoryModal(true)}
+          >
+            <MaterialIcons name="category" size={getScaledFontSize(18)} color="#008080" />
+            <Text style={[styles.filterButtonText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Categories
+              {selectedCategories.length > 0 && ` (${selectedCategories.length})`}
+            </Text>
+            <MaterialIcons name="keyboard-arrow-down" size={getScaledFontSize(20)} color="#008080" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Provider Filter Modal */}
+      {renderFilterModal(
+        showProviderModal,
+        () => setShowProviderModal(false),
+        'Select Providers',
+        providers,
+        selectedProviders,
+        toggleProvider
+      )}
+
+      {/* Category Filter Modal */}
+      {renderFilterModal(
+        showCategoryModal,
+        () => setShowCategoryModal(false),
+        'Select Categories',
+        categories,
+        selectedCategories,
+        toggleCategory
+      )}
+
+      {/* Report Detail Modal */}
+      <Modal
+        visible={showReportModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <SafeAreaView style={[styles.reportModalContainer, { backgroundColor: colors.background }]}>
+          {selectedReport && (
+            <>
+              {/* Modal Header */}
+              <View style={[styles.reportModalHeader, { borderBottomColor: '#E0E0E0' }]}>
+                <View style={styles.reportModalHeaderTop}>
+                  <TouchableOpacity onPress={() => setShowReportModal(false)}>
+                    <MaterialIcons name="arrow-back" size={getScaledFontSize(24)} color={colors.text} />
+                  </TouchableOpacity>
+                  <Text style={[styles.reportModalTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(700) as any }]}>
+                    {selectedReport.title}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowReportModal(false)}>
+                    <MaterialIcons name="close" size={getScaledFontSize(24)} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.reportModalMeta}>
+                  <Text style={[styles.reportModalMetaText, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                    {selectedReport.provider} • {selectedReport.date}
+                  </Text>
+                  {selectedReport.accessionNumber && (
+                    <Text style={[styles.reportModalMetaText, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                      Accession: {selectedReport.accessionNumber}
+                    </Text>
+                  )}
+                </View>
+              </View>
+
+              {/* Modal Content */}
+              <ScrollView style={styles.reportModalContent} contentContainerStyle={styles.reportModalContentContainer}>
+                {/* Results Section */}
+                <View style={styles.reportSection}>
+                  <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
+                    Results
+                  </Text>
+                  <View style={[styles.reportModalCard, { backgroundColor: colors.background, borderLeftColor: '#008080' }]}>
+                    <Text style={[styles.reportModalCardTitle, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+                      Results
+                    </Text>
+                    <Text style={[styles.reportModalCardText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                      {selectedReport.title}
+                      {selectedReport.accessionNumber && ` [${selectedReport.accessionNumber}]`}
+                      {selectedReport.orderNumber && ` (Accession ${selectedReport.accessionNumber}) (Order ${selectedReport.orderNumber})`}
+                    </Text>
+                    <Text style={[styles.reportModalCardDate, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                      ▲{selectedReport.date} {selectedReport.signedOn && `- ${selectedReport.signedOn}`}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Narrative Section */}
+                {(selectedReport.exam || selectedReport.clinicalHistory || selectedReport.technique || selectedReport.findings) && (
+                  <View style={styles.reportSection}>
+                    <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
+                      Narrative
+                    </Text>
+                    
+                    {selectedReport.exam && (
+                      <View style={styles.reportNarrativeItem}>
+                        <Text style={[styles.reportNarrativeLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                          EXAM:
+                        </Text>
+                        <Text style={[styles.reportNarrativeText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                          {selectedReport.exam}
+                        </Text>
+                      </View>
+                    )}
+
+                    {selectedReport.clinicalHistory && (
+                      <View style={styles.reportNarrativeItem}>
+                        <Text style={[styles.reportNarrativeLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                          CLINICAL HISTORY:
+                        </Text>
+                        <Text style={[styles.reportNarrativeText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                          {selectedReport.clinicalHistory}
+                        </Text>
+                      </View>
+                    )}
+
+                    {selectedReport.technique && (
+                      <View style={styles.reportNarrativeItem}>
+                        <Text style={[styles.reportNarrativeLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                          TECHNIQUE:
+                        </Text>
+                        <Text style={[styles.reportNarrativeText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                          {selectedReport.technique}
+                        </Text>
+                      </View>
+                    )}
+
+                    {selectedReport.findings && (
+                      <View style={styles.reportNarrativeItem}>
+                        <Text style={[styles.reportNarrativeLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                          FINDINGS:
+                        </Text>
+                        <Text style={[styles.reportNarrativeText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                          {selectedReport.findings}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Impression Section */}
+                {selectedReport.impression && (
+                  <View style={styles.reportSection}>
+                    <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
+                      Impression
+                    </Text>
+                    <Text style={[styles.reportImpressionText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                      {selectedReport.impression}
+                    </Text>
+                    {selectedReport.interpretedBy && (
+                      <Text style={[styles.reportSignatureText, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                        Interpreted By: {selectedReport.interpretedBy}
+                      </Text>
+                    )}
+                    {selectedReport.signedBy && (
+                      <Text style={[styles.reportSignatureText, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                        Electronically Signed By: {selectedReport.signedBy}
+                      </Text>
+                    )}
+                    {selectedReport.signedOn && (
+                      <Text style={[styles.reportSignatureText, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                        Electronically Signed On: {selectedReport.signedOn}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Performing Facility */}
+                {selectedReport.performingFacility && (
+                  <View style={styles.reportSection}>
+                    <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
+                      Performing Facility
+                    </Text>
+                    <Text style={[styles.reportFacilityText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                      {selectedReport.performingFacility.name}
+                      {'\n'}{selectedReport.performingFacility.address}
+                      {'\n'}{selectedReport.performingFacility.city}, {selectedReport.performingFacility.state} {selectedReport.performingFacility.zip}
+                      {selectedReport.performingFacility.phone && `\n${selectedReport.performingFacility.phone}`}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            </>
+          )}
+        </SafeAreaView>
+      </Modal>
+
+      {/* Tabs */}
+      <ScrollView 
+        ref={scrollViewRef}
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScrollContainer}
+        contentContainerStyle={styles.tabContainer}
+      >
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            style={[styles.tab, activeTab === tab.id && styles.activeTab]}
+            onPress={() => handleTabPress(tab.id)}
+          >
+            <Text style={[styles.tabText, activeTab === tab.id && styles.activeTabText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Tab Content */}
+      {renderReports()}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    alignItems: 'center',
+    padding: 24,
+    paddingTop: 24,
+    backgroundColor: 'white',
+    marginBottom: 16,
+  },
+  reportsTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  filtersContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  filterButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  filterButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+  },
+  filterButtonText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  checkboxLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  tabScrollContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 4,
+  },
+  tab: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 6,
+    minWidth: 120,
+  },
+  activeTab: {
+    backgroundColor: '#008080',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  activeTabText: {
+    color: 'white',
+  },
+  tabContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  planCard: {
+    marginBottom: 16,
+  },
+  planHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  planTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  planDate: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  diagnosisContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+    width: '100%',
+  },
+  diagnosisTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  diagnosis: {
+    fontSize: 14,
+    color: '#666',
+  },
+  planDescription: {
+    fontSize: 16,
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  medicationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  medication: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  appointmentCard: {
+    marginBottom: 12,
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  appointmentDate: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  appointmentTime: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  appointmentRight: {
+    alignItems: 'flex-end',
+  },
+  appointmentType: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  progressNoteCard: {
+    marginBottom: 16,
+  },
+  progressNoteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  progressNoteDate: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  progressNoteTime: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  progressNoteAuthor: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  progressNoteText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  reportHeader: {
+    marginBottom: 12,
+  },
+  reportTitleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 8,
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    flex: 1,
+    flexShrink: 1,
+  },
+  reportDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reportMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+    gap: 12,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    maxWidth: '100%',
+  },
+  metaText: {
+    fontSize: 14,
+    color: '#666',
+    flexShrink: 1,
+  },
+  reportDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    lineHeight: 24,
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    marginTop: 8,
+  },
+  viewButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#008080',
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  reportModalContainer: {
+    flex: 1,
+  },
+  reportModalHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  reportModalHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  reportModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: 16,
+  },
+  reportModalMeta: {
+    gap: 4,
+  },
+  reportModalMetaText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  reportModalContent: {
+    flex: 1,
+  },
+  reportModalContentContainer: {
+    padding: 20,
+  },
+  reportSection: {
+    marginBottom: 24,
+  },
+  reportSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  reportCard: {
+    marginBottom: 16,
+  },
+  reportModalCard: {
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  reportModalCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  reportModalCardText: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  reportModalCardDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  reportNarrativeItem: {
+    marginBottom: 16,
+  },
+  reportNarrativeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  reportNarrativeText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  reportImpressionText: {
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  reportSignatureText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  reportFacilityText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+});
