@@ -26,11 +26,11 @@ export default function SplashGate() {
         //   router.replace('/(auth)/sign-in' as any);
         // }
         setTimeout(() => {
-          router.replace('/(auth)/sign-in');
+          router.replace('/(auth)/provider-selection');
         }, 3000);
       } catch (e) {
         if (!isMounted) return;
-        router.replace('/(auth)/sign-in' as any);
+        router.replace('/(auth)/provider-selection' as any);
       } finally {
         SplashScreen.hideAsync().catch(() => {});
       }
