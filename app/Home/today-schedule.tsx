@@ -6,6 +6,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Platform, AppState, RefreshControl } from 'react-native';
 import { Avatar, Card, IconButton, List, Button } from 'react-native-paper';
 import { getTodayHealthMetrics, HealthMetrics } from '@/services/health';
+import { Medication } from '@/services/openai';
 
 interface Task {
   id: number;
@@ -33,6 +34,27 @@ export default function TodayScheduleScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const appState = useRef(AppState.currentState);
+
+  const [medications, setMedications] = useState<Medication[]>([
+    {
+      name: 'Metformin',
+      dosage: '500mg',
+      frequency: 'Twice daily with meals',
+      purpose: 'Diabetes management',
+    },
+    {
+      name: 'Lisinopril',
+      dosage: '10mg',
+      frequency: 'Once daily in the morning',
+      purpose: 'Blood pressure control',
+    },
+    {
+      name: 'Aspirin',
+      dosage: '81mg',
+      frequency: 'Once daily',
+      purpose: 'Cardiovascular protection',
+    },
+  ]);
 
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -265,6 +287,71 @@ export default function TodayScheduleScreen() {
               </Text>
             </View>
           </View>
+        </Card>
+
+        {/* Medications Section */}
+        <Card style={[styles.medicationsCard, { backgroundColor: colors.background }]}>
+          <Text style={[
+            styles.medicationsTitle,
+            {
+              fontSize: getScaledFontSize(16),
+              fontWeight: getScaledFontWeight(600) as any,
+              color: colors.text,
+              marginBottom: 12,
+            }
+          ]}>
+            Current Medications
+          </Text>
+          {medications.map((medication, index) => (
+            <View 
+              key={index} 
+              style={[
+                styles.medicationItem,
+                index < medications.length - 1 && {
+                  borderBottomWidth: 1,
+                  borderBottomColor: colors.text + '20',
+                }
+              ]}
+            >
+              <View style={styles.medicationIconContainer}>
+                <List.Icon icon="pill" color="#008080" />
+              </View>
+              <View style={styles.medicationContent}>
+                <Text style={[
+                  styles.medicationName,
+                  {
+                    fontSize: getScaledFontSize(16),
+                    fontWeight: getScaledFontWeight(600) as any,
+                    color: colors.text,
+                    marginBottom: 4,
+                  }
+                ]}>
+                  {medication.name}
+                </Text>
+                <Text style={[
+                  styles.medicationDosage,
+                  {
+                    fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(500) as any,
+                    color: colors.text,
+                    marginBottom: 2,
+                  }
+                ]}>
+                  {medication.dosage} • {medication.frequency}
+                </Text>
+                <Text style={[
+                  styles.medicationPurpose,
+                  {
+                    fontSize: getScaledFontSize(12),
+                    fontWeight: getScaledFontWeight(400) as any,
+                    color: colors.text + '80',
+                  }
+                ]}>
+                  {medication.purpose}
+                </Text>
+              </View>
+            </View>
+          ))}
         </Card>
 
         {/* Health Metrics Section */}
@@ -812,6 +899,42 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   healthMetricLabel: {
+    fontSize: 12,
+  },
+  medicationsCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+  medicationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  medicationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+  },
+  medicationIconContainer: {
+    marginRight: 12,
+    marginTop: 2,
+  },
+  medicationContent: {
+    flex: 1,
+  },
+  medicationName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  medicationDosage: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  medicationPurpose: {
     fontSize: 12,
   },
 });
