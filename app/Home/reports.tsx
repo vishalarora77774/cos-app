@@ -1,11 +1,12 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, SafeAreaView } from 'react-native';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, SafeAreaView, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import { Card } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Checkbox } from 'expo-checkbox';
+import { generateHistorySummaries, HistorySummary, PatientHistoryData } from '@/services/openai';
 
 interface Report {
   id: number;
@@ -42,7 +43,11 @@ export default function Reports() {
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
+  const historyScrollViewRef = useRef<ScrollView>(null);
 
+  // Main tab: 'reports' or 'history'
+  const [mainTab, setMainTab] = useState<'reports' | 'history'>('reports');
+  // Reports tab state
   const [activeTab, setActiveTab] = useState('all');
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -50,6 +55,13 @@ export default function Reports() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  
+  // History tab state
+  const [historySubTab, setHistorySubTab] = useState<'medical' | 'psychiatric' | 'psychological' | 'social'>('medical');
+  const [historySummary, setHistorySummary] = useState<HistorySummary | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isRefreshingHistory, setIsRefreshingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const tabs = [
     { id: 'all', label: 'All Reports' },
@@ -361,7 +373,191 @@ export default function Reports() {
     }
   };
 
+  const handleHistorySubTabPress = (subTabId: 'medical' | 'psychiatric' | 'psychological' | 'social') => {
+    setHistorySubTab(subTabId);
+    
+    // Auto-scroll to center the active sub-tab
+    const subTabIndex = historySubTabs.findIndex(tab => tab.id === subTabId);
+    if (subTabIndex !== -1 && historyScrollViewRef.current) {
+      const tabWidth = 120 + 40; // minWidth + paddingHorizontal * 2
+      const scrollPosition = Math.max(0, (subTabIndex * tabWidth) - (tabWidth / 2));
+      
+      historyScrollViewRef.current.scrollTo({
+        x: scrollPosition,
+        animated: true,
+      });
+    }
+  };
+
+  // Load history data and generate summaries
+  const loadHistorySummaries = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshingHistory(true);
+    } else {
+      setIsLoadingHistory(true);
+    }
+    setHistoryError(null);
+
+    try {
+      // Gather patient data from various sources (in a real app, this would come from your API)
+      const historyData: PatientHistoryData = {
+        currentTreatmentPlan: {
+          plan: 'Diabetes management and cardiovascular health monitoring',
+          duration: '12 months',
+          goals: ['Maintain blood sugar levels', 'Reduce cardiovascular risk', 'Improve overall wellness'],
+        },
+        previousTreatmentPlan: {
+          plan: 'Acute lower back pain with suspected disc involvement',
+          duration: '3 months',
+          goals: ['Pain management', 'Improve mobility', 'Reduce inflammation'],
+        },
+        currentMedications: [
+          {
+            name: 'Metformin',
+            dosage: '500mg',
+            frequency: 'Twice daily with meals',
+            purpose: 'Diabetes management',
+          },
+          {
+            name: 'Lisinopril',
+            dosage: '10mg',
+            frequency: 'Once daily in the morning',
+            purpose: 'Blood pressure control',
+          },
+          {
+            name: 'Aspirin',
+            dosage: '81mg',
+            frequency: 'Once daily',
+            purpose: 'Cardiovascular protection',
+          },
+        ],
+        previousMedications: [
+          {
+            name: 'Ibuprofen',
+            dosage: '400mg',
+            frequency: 'As needed',
+            purpose: 'Pain relief',
+          },
+          {
+            name: 'Acetaminophen',
+            dosage: '500mg',
+            frequency: 'As needed',
+            purpose: 'Pain management',
+          },
+        ],
+        reports: allReports.map(report => ({
+          title: report.title,
+          category: report.category,
+          date: report.date,
+          findings: report.findings,
+          impression: report.impression,
+          description: report.description,
+        })),
+        providerNotes: [
+          {
+            date: 'Nov 18, 2024',
+            author: 'Dr. Max K.',
+            note: 'Patient shows significant improvement in range of motion. Lower back pain has decreased from 7/10 to 4/10. Patient is responding well to physical therapy exercises. Continue with current treatment plan.',
+            providerSpecialty: 'Orthopedist',
+          },
+          {
+            date: 'Nov 11, 2024',
+            author: 'Dr. Max K.',
+            note: 'Follow-up appointment completed. Patient reports moderate pain relief with current medication regimen. Muscle tension has improved. Recommended continuation of weekly physical therapy sessions.',
+            providerSpecialty: 'Orthopedist',
+          },
+          {
+            date: 'Nov 20, 2024',
+            author: 'Dr. Sarah Johnson',
+            note: 'Patient showing good progress with medication adherence. Blood pressure readings are stable.',
+            providerSpecialty: 'Cardiologist',
+          },
+          {
+            date: 'Nov 25, 2024',
+            author: 'Dr. Michael Chen',
+            note: 'HbA1c levels have decreased from 7.2% to 6.8%. Continue current medication regimen.',
+            providerSpecialty: 'Endocrinologist',
+          },
+        ],
+        appointments: [
+          {
+            id: '1',
+            date: '2024-11-20',
+            time: '10:00 AM',
+            type: 'Follow-up',
+            status: 'Completed',
+            doctorName: 'Dr. Sarah Johnson',
+            doctorSpecialty: 'Cardiologist',
+            diagnosis: 'Type 2 Diabetes with controlled blood pressure',
+            notes: 'Patient showing good progress with medication adherence. Blood pressure readings are stable.',
+          },
+          {
+            id: '2',
+            date: '2024-11-25',
+            time: '2:30 PM',
+            type: 'Routine Check-up',
+            status: 'Completed',
+            doctorName: 'Dr. Michael Chen',
+            doctorSpecialty: 'Endocrinologist',
+            diagnosis: 'Diabetes management - HbA1c improving',
+            notes: 'HbA1c levels have decreased from 7.2% to 6.8%. Continue current medication regimen.',
+          },
+        ],
+        doctorDiagnoses: [
+          {
+            doctorName: 'Dr. Sarah Johnson',
+            doctorSpecialty: 'Cardiologist',
+            date: '2024-11-20',
+            diagnosis: 'Type 2 Diabetes with controlled hypertension',
+            notes: 'Patient has well-controlled blood pressure with current medication. Cardiovascular risk factors are being managed effectively.',
+            treatmentRecommendations: [
+              'Continue Lisinopril 10mg daily',
+              'Maintain low-sodium diet',
+              'Regular blood pressure monitoring',
+            ],
+          },
+          {
+            doctorName: 'Dr. Michael Chen',
+            doctorSpecialty: 'Endocrinologist',
+            date: '2024-11-25',
+            diagnosis: 'Type 2 Diabetes - Well controlled',
+            notes: 'HbA1c levels showing significant improvement. Patient is responding well to Metformin therapy.',
+            treatmentRecommendations: [
+              'Continue Metformin 500mg twice daily',
+              'Monitor blood sugar levels regularly',
+              'Maintain current dietary modifications',
+            ],
+          },
+        ],
+      };
+
+      const summaries = await generateHistorySummaries(historyData);
+      setHistorySummary(summaries);
+    } catch (error) {
+      console.error('Error loading history summaries:', error);
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load history summaries. Please try again later.');
+    } finally {
+      setIsLoadingHistory(false);
+      setIsRefreshingHistory(false);
+    }
+  }, [allReports]);
+
+  // Load history when main tab changes to history
+  useEffect(() => {
+    if (mainTab === 'history' && !historySummary && !isLoadingHistory) {
+      loadHistorySummaries();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mainTab]); // Only depend on mainTab to trigger load when switching to history
+
   const filteredReports = getFilteredReports();
+
+  const historySubTabs = [
+    { id: 'medical', label: 'Medical' },
+    { id: 'psychiatric', label: 'Psychiatric' },
+    { id: 'psychological', label: 'Psychological' },
+    { id: 'social', label: 'Social' },
+  ];
 
   const renderReports = () => (
     <ScrollView style={styles.tabContent}>
@@ -455,15 +651,114 @@ export default function Reports() {
     </ScrollView>
   );
 
+  const renderHistoryContent = () => {
+    if (historyError) {
+      return (
+        <View style={styles.historyErrorContainer}>
+          <Text style={[styles.historyErrorText, { color: '#ff4444', fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+            {historyError}
+          </Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: '#008080', marginTop: 16 }]}
+            onPress={() => loadHistorySummaries(false)}
+          >
+            <Text style={[styles.retryButtonText, { color: 'white', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+              Try Again
+            </Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (!historySummary) {
+      return (
+        <View style={styles.historyEmptyContainer}>
+          <Text style={[styles.historyEmptyText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>
+            No history data available
+          </Text>
+        </View>
+      );
+    }
+
+    const getHistoryContent = () => {
+      switch (historySubTab) {
+        case 'medical':
+          return historySummary.medical;
+        case 'psychiatric':
+          return historySummary.psychiatric;
+        case 'psychological':
+          return historySummary.psychological;
+        case 'social':
+          return historySummary.social;
+        default:
+          return '';
+      }
+    };
+
+    return (
+      <View style={styles.historyContent}>
+        <Card style={styles.historyCard}>
+          <Card.Content>
+            <Text style={[styles.historyContentText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(24) }]}>
+              {getHistoryContent()}
+            </Text>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  };
+
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={{ flex: 1 }}>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: colors.background }]}
+        refreshControl={
+          mainTab === 'history' && !isLoadingHistory && !isRefreshingHistory ? (
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => loadHistorySummaries(true)}
+              tintColor={colors.tint}
+              colors={[colors.tint]}
+            />
+          ) : undefined
+        }
+      >
       {/* Reports Title Header */}
       <View style={[styles.header, { backgroundColor: colors.background, paddingTop: insets.top + 24 }]}>
-        <Text style={[styles.reportsTitle, { color: colors.text, fontSize: getScaledFontSize(28), fontWeight: getScaledFontWeight(700) as any }]}>Reports</Text>
+        <Text style={[styles.reportsTitle, { color: colors.text, fontSize: getScaledFontSize(28), fontWeight: getScaledFontWeight(700) as any }]}>Reports & History</Text>
       </View>
 
-      {/* Filters */}
-      <View style={[styles.filtersContainer, { backgroundColor: colors.background }]}>
+      {/* Main Tabs (Reports / History) */}
+      <View style={[styles.mainTabsContainer, { backgroundColor: colors.background }]}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.mainTabsScroll}
+          contentContainerStyle={styles.mainTabsContent}
+        >
+          <TouchableOpacity
+            style={[styles.mainTab, mainTab === 'reports' && styles.activeMainTab]}
+            onPress={() => setMainTab('reports')}
+          >
+            <Text style={[styles.mainTabText, mainTab === 'reports' && styles.activeMainTabText, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+              Reports
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.mainTab, mainTab === 'history' && styles.activeMainTab]}
+            onPress={() => setMainTab('history')}
+          >
+            <Text style={[styles.mainTabText, mainTab === 'history' && styles.activeMainTabText, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+              History
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {mainTab === 'reports' ? (
+        <>
+          {/* Filters */}
+          <View style={[styles.filtersContainer, { backgroundColor: colors.background }]}>
         <View style={styles.filterButtonsRow}>
           <TouchableOpacity
             style={[
@@ -674,30 +969,71 @@ export default function Reports() {
         </SafeAreaView>
       </Modal>
 
-      {/* Tabs */}
-      <ScrollView 
-        ref={scrollViewRef}
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabScrollContainer}
-        contentContainerStyle={styles.tabContainer}
-      >
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.tab, activeTab === tab.id && styles.activeTab]}
-            onPress={() => handleTabPress(tab.id)}
+          {/* Tabs */}
+          <ScrollView 
+            ref={scrollViewRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.tabScrollContainer}
+            contentContainerStyle={styles.tabContainer}
           >
-            <Text style={[styles.tabText, activeTab === tab.id && styles.activeTabText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+            {tabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, activeTab === tab.id && styles.activeTab]}
+                onPress={() => handleTabPress(tab.id)}
+              >
+                <Text style={[styles.tabText, activeTab === tab.id && styles.activeTabText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Tab Content */}
+          {renderReports()}
+        </>
+      ) : (
+        <>
+          {/* History Sub-Tabs */}
+          <ScrollView 
+            ref={historyScrollViewRef}
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.tabScrollContainer}
+            contentContainerStyle={styles.tabContainer}
+          >
+            {historySubTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tab, historySubTab === tab.id && styles.activeTab]}
+                onPress={() => handleHistorySubTabPress(tab.id as 'medical' | 'psychiatric' | 'psychological' | 'social')}
+              >
+                <Text style={[styles.tabText, historySubTab === tab.id && styles.activeTabText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* History Content */}
+          {renderHistoryContent()}
+        </>
+      )}
       </ScrollView>
 
-      {/* Tab Content */}
-      {renderReports()}
-    </ScrollView>
+      {/* Loading Overlay for History */}
+      {(isLoadingHistory || isRefreshingHistory) && mainTab === 'history' && (
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingOverlayContent, { backgroundColor: colors.background }]}>
+            <ActivityIndicator size="large" color="#008080" />
+            <Text style={[styles.loadingOverlayText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>
+              {isRefreshingHistory ? 'Refreshing history...' : 'Analyzing your health history...'}
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -1087,5 +1423,116 @@ const styles = StyleSheet.create({
   reportFacilityText: {
     fontSize: 14,
     lineHeight: 22,
+  },
+  mainTabsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    marginBottom: 8,
+  },
+  mainTabsScroll: {
+    marginHorizontal: 0,
+  },
+  mainTabsContent: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 4,
+  },
+  mainTab: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 6,
+    minWidth: 120,
+  },
+  activeMainTab: {
+    backgroundColor: '#008080',
+  },
+  mainTabText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  activeMainTabText: {
+    color: 'white',
+  },
+  historyLoadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  historyLoadingText: {
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  historyErrorContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyErrorText: {
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  historyEmptyContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyEmptyText: {
+    textAlign: 'center',
+  },
+  historyContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  historyCard: {
+    marginBottom: 16,
+  },
+  historyContentText: {
+    lineHeight: 24,
+  },
+  retryButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    textAlign: 'center',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingOverlayContent: {
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 200,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  loadingOverlayText: {
+    marginTop: 16,
+    textAlign: 'center',
   },
 });
