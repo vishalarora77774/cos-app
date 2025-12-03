@@ -20,6 +20,19 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'sparkles': 'auto-awesome',
   'doc.text': 'description',
+  'line.3.horizontal': 'menu',
+  'list.bullet': 'menu',
+  'accessibility': 'accessibility',
+  'bell.fill': 'notifications',
+  'xmark': 'close',
+  'textformat.size': 'text-fields',
+  'minus': 'remove',
+  'plus': 'add',
+  'bold': 'format-bold',
+  'circle.fill': 'circle',
+  'person.fill': 'person',
+  'calendar': 'calendar-today',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**

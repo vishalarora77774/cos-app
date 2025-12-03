@@ -7,6 +7,13 @@ import React, { useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+interface ConnectedHospital {
+  id: string;
+  name: string;
+  provider: string;
+  connectedDate: string;
+}
+
 interface AppWrapperProps {
   children: React.ReactNode;
   showFooter?: boolean;
@@ -14,19 +21,39 @@ interface AppWrapperProps {
   showAccessibilityIcon?: boolean;
   showLogo?: boolean;
   showBellIcon?: boolean;
+  showHamburgerIcon?: boolean;
 }
+
+// Mock data for connected hospitals - replace with actual data source later
+const mockConnectedHospitals: ConnectedHospital[] = [
+  {
+    id: '1',
+    name: 'Mayo Clinic',
+    provider: 'EPIC',
+    connectedDate: '2024-01-15',
+  },
+  {
+    id: '2',
+    name: 'Cleveland Clinic',
+    provider: 'Cerner',
+    connectedDate: '2024-02-20',
+  },
+];
 
 export function AppWrapper({ 
   children, 
   notificationCount = 0, 
   showAccessibilityIcon = true, 
   showLogo = true, 
-  showBellIcon = true 
+  showBellIcon = false,
+  showHamburgerIcon = true
 }: AppWrapperProps) {
   const { settings, increaseFontSize, decreaseFontSize, toggleBoldText, toggleTheme, getScaledFontWeight, getScaledFontSize } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const pathname = usePathname();
   const [isAccessibilityModalVisible, setIsAccessibilityModalVisible] = useState(false);
+  const [isDrawerMenuVisible, setIsDrawerMenuVisible] = useState(false);
+  const [connectedHospitals] = useState<ConnectedHospital[]>(mockConnectedHospitals);
 
   const handleTabPress = (route: string) => {
     router.push(`/(tabs)/${route}` as any);
@@ -40,8 +67,23 @@ export function AppWrapper({
     setIsAccessibilityModalVisible(true);
   };
 
+  const handleHamburgerPress = () => {
+    setIsDrawerMenuVisible(true);
+  };
+
   const closeAccessibilityModal = () => {
     setIsAccessibilityModalVisible(false);
+  };
+
+  const closeDrawerMenu = () => {
+    setIsDrawerMenuVisible(false);
+  };
+
+  const handleConnectEHR = () => {
+    // TODO: Implement EHR connection flow
+    closeDrawerMenu();
+    // Navigate to provider selection or EHR connection screen
+    router.push('/(auth)/provider-selection');
   };
 
 
@@ -50,21 +92,23 @@ export function AppWrapper({
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background}]}>
         <View style={styles.headerContent}>
-          {/* Accessibility Icon */}
-          {showAccessibilityIcon && (
-            <TouchableOpacity 
-              style={styles.accessibilityContainer}
-              onPress={handleAccessibilityPress}
-            >
-              <IconSymbol 
-                name="accessibility" 
-                size={getScaledFontSize(32)} 
-                color={colors.text} 
-              />
-            </TouchableOpacity>
-          )}
+          {/* Left side - Hamburger or spacer */}
+          <View style={styles.headerLeft}>
+            {showHamburgerIcon && (
+              <TouchableOpacity 
+                style={styles.hamburgerContainer}
+                onPress={handleHamburgerPress}
+              >
+                <IconSymbol 
+                  name="list.bullet" 
+                  size={getScaledFontSize(28)} 
+                  color={colors.text} 
+                />
+              </TouchableOpacity>
+            )}
+          </View>
           
-          {/* Logo */}
+          {/* Center - Logo */}
           {showLogo && (
             <View style={styles.logoContainer}>
               <Image
@@ -75,26 +119,21 @@ export function AppWrapper({
             </View>
           )}
           
-          {/* Notification Bell */}
-          {showBellIcon && (
-            <TouchableOpacity 
-              style={styles.notificationContainer}
-              onPress={handleNotificationPress}
-            >
-              <IconSymbol 
-                name="bell.fill" 
-                size={getScaledFontSize(24)} 
-                color={colors.text} 
-              />
-              {notificationCount > 0 && (
-                <View style={[styles.notificationBadge]}>
-                  <Text style={[styles.notificationText, { fontSize: getScaledFontSize(10)}]}>
-                    {notificationCount > 99 ? '99+' : notificationCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
+          {/* Right side - Accessibility Icon */}
+          <View style={styles.headerRight}>
+            {showAccessibilityIcon && (
+              <TouchableOpacity 
+                style={styles.accessibilityContainer}
+                onPress={handleAccessibilityPress}
+              >
+                <IconSymbol 
+                  name="accessibility" 
+                  size={getScaledFontSize(32)} 
+                  color={colors.text} 
+                />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -102,6 +141,85 @@ export function AppWrapper({
       <View style={styles.content}>
         {children}
       </View>
+
+      {/* Drawer Menu Modal */}
+      <Modal
+        visible={isDrawerMenuVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeDrawerMenu}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.text + '20' }]}>
+            <Text style={[styles.modalTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>EHR Connections</Text>
+            <TouchableOpacity onPress={closeDrawerMenu}>
+              <IconSymbol name="xmark" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            {/* Connect Another EHR Option */}
+            <TouchableOpacity 
+              style={[styles.ehrOption, { borderBottomColor: colors.text + '20' }]}
+              onPress={handleConnectEHR}
+            >
+              <View style={styles.ehrOptionContent}>
+                <IconSymbol name="plus" size={getScaledFontSize(24)} color={colors.tint} />
+                <Text style={[styles.ehrOptionText, { color: colors.tint, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>
+                  Connect Another EHR
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            {connectedHospitals.length > 0 && (
+              <View style={[styles.divider, { backgroundColor: colors.text + '20' }]} />
+            )}
+
+            {/* Connected Hospitals List */}
+            {connectedHospitals.length > 0 && (
+              <View style={styles.connectedHospitalsSection}>
+                <Text style={[styles.sectionTitle, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+                  Connected Hospitals
+                </Text>
+                {connectedHospitals.map((hospital) => (
+                  <TouchableOpacity 
+                    key={hospital.id}
+                    style={[styles.hospitalItem, { borderBottomColor: colors.text + '10' }]}
+                    onPress={() => {
+                      // TODO: Handle hospital selection/view details
+                      closeDrawerMenu();
+                    }}
+                  >
+                    <View style={styles.hospitalItemContent}>
+                      <View style={styles.hospitalInfo}>
+                        <Text style={[styles.hospitalName, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
+                          {hospital.name}
+                        </Text>
+                        <Text style={[styles.hospitalProvider, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
+                          {hospital.provider}
+                        </Text>
+                        <Text style={[styles.hospitalDate, { color: colors.text + '60', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                          Connected on {new Date(hospital.connectedDate).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {connectedHospitals.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={[styles.emptyStateText, { color: colors.text + '60', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
+                  No connected hospitals yet
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Accessibility Modal */}
       <Modal
@@ -209,6 +327,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerLeft: {
+    width: 44, // Fixed width to match icon container size
+    alignItems: 'flex-start',
+  },
+  headerRight: {
+    width: 44, // Fixed width to match icon container size
+    alignItems: 'flex-end',
+  },
+  hamburgerContainer: {
+    padding: 8,
   },
   accessibilityContainer: {
     padding: 8,
@@ -368,5 +497,65 @@ const styles = StyleSheet.create({
   themeLabel: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  ehrOption: {
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
+  ehrOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ehrOptionText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    marginVertical: 16,
+    marginHorizontal: 20,
+  },
+  connectedHospitalsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  hospitalItem: {
+    borderBottomWidth: 1,
+    paddingVertical: 16,
+  },
+  hospitalItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  hospitalInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  hospitalName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  hospitalProvider: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  hospitalDate: {
+    fontSize: 12,
+  },
+  emptyState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 14,
   },
 });

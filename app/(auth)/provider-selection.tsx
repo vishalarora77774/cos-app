@@ -23,7 +23,7 @@ export default function ProviderSelectionScreen() {
   };
 
   return (
-    <AppWrapper showBellIcon={false} showLogo={false}>
+    <AppWrapper showBellIcon={false} showLogo={false} showHamburgerIcon={false}>
       <ScrollView 
         contentContainerStyle={[styles.scrollContainer, { backgroundColor: colors.background }]}
         showsVerticalScrollIndicator={false}
