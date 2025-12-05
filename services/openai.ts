@@ -295,3 +295,225 @@ Important: Use simple, clear language appropriate for elderly patients. Avoid me
   }
 }
 
+export interface HistorySummary {
+  medical: string;
+  psychiatric: string;
+  psychological: string;
+  social: string;
+}
+
+export interface PatientHistoryData {
+  currentTreatmentPlan?: TreatmentPlan;
+  previousTreatmentPlan?: TreatmentPlan;
+  currentMedications?: Medication[];
+  previousMedications?: Medication[];
+  reports?: Array<{
+    title: string;
+    category: string;
+    date: string;
+    findings?: string;
+    impression?: string;
+    description?: string;
+  }>;
+  providerNotes?: Array<{
+    date: string;
+    author: string;
+    note: string;
+    providerSpecialty?: string;
+  }>;
+  appointments?: Appointment[];
+  doctorDiagnoses?: DoctorDiagnosis[];
+}
+
+/**
+ * Generates AI-powered history summaries categorized into medical, psychiatric, psychological, and social
+ * @param historyData - The patient history data including treatment plans, medications, reports, and notes
+ */
+export async function generateHistorySummaries(
+  historyData: PatientHistoryData
+): Promise<HistorySummary> {
+  if (!OPENAI_API_KEY) {
+    console.error('OpenAI API key is missing. Please set EXPO_PUBLIC_OPEN_AI_PUBLIC_KEY in your .env file.');
+    throw new Error('OpenAI API key not configured. Please set EXPO_PUBLIC_OPEN_AI_PUBLIC_KEY in your .env file.');
+  }
+
+  console.log('Calling OpenAI API for history summaries');
+
+  // Construct comprehensive prompt for OpenAI
+  const prompt = `You are a helpful medical assistant providing comprehensive patient history summaries. Analyze the following patient information and provide detailed summaries in four categories: Medical, Psychiatric, Psychological, and Social.
+
+PATIENT INFORMATION:
+
+${historyData.currentTreatmentPlan ? `
+CURRENT TREATMENT PLAN:
+- Plan: ${historyData.currentTreatmentPlan.plan}
+- Duration: ${historyData.currentTreatmentPlan.duration}
+- Goals: ${historyData.currentTreatmentPlan.goals.join(', ')}
+` : ''}
+
+${historyData.previousTreatmentPlan ? `
+PREVIOUS TREATMENT PLAN:
+- Plan: ${historyData.previousTreatmentPlan.plan}
+- Duration: ${historyData.previousTreatmentPlan.duration}
+- Goals: ${historyData.previousTreatmentPlan.goals.join(', ')}
+` : ''}
+
+${historyData.currentMedications && historyData.currentMedications.length > 0 ? `
+CURRENT MEDICATIONS:
+${historyData.currentMedications.map(med => `
+- ${med.name}: ${med.dosage} - ${med.frequency} (${med.purpose})
+`).join('\n')}
+` : ''}
+
+${historyData.previousMedications && historyData.previousMedications.length > 0 ? `
+PREVIOUS MEDICATIONS:
+${historyData.previousMedications.map(med => `
+- ${med.name}: ${med.dosage} - ${med.frequency} (${med.purpose})
+`).join('\n')}
+` : ''}
+
+${historyData.reports && historyData.reports.length > 0 ? `
+MEDICAL REPORTS:
+${historyData.reports.map(report => `
+- ${report.title} (${report.category}) - ${report.date}
+  ${report.description ? `Description: ${report.description}` : ''}
+  ${report.findings ? `Findings: ${report.findings}` : ''}
+  ${report.impression ? `Impression: ${report.impression}` : ''}
+`).join('\n')}
+` : ''}
+
+${historyData.providerNotes && historyData.providerNotes.length > 0 ? `
+PROVIDER NOTES:
+${historyData.providerNotes.map(note => `
+- ${note.date} - ${note.author}${note.providerSpecialty ? ` (${note.providerSpecialty})` : ''}:
+  ${note.note}
+`).join('\n')}
+` : ''}
+
+${historyData.appointments && historyData.appointments.length > 0 ? `
+APPOINTMENTS:
+${historyData.appointments.map(apt => `
+- ${apt.type} with ${apt.doctorName}${apt.doctorSpecialty ? ` (${apt.doctorSpecialty})` : ''} on ${apt.date} at ${apt.time}
+  Status: ${apt.status}
+  ${apt.diagnosis ? `Diagnosis: ${apt.diagnosis}` : ''}
+  ${apt.notes ? `Notes: ${apt.notes}` : ''}
+`).join('\n')}
+` : ''}
+
+${historyData.doctorDiagnoses && historyData.doctorDiagnoses.length > 0 ? `
+DOCTOR DIAGNOSES:
+${historyData.doctorDiagnoses.map(diag => `
+- ${diag.doctorName} (${diag.doctorSpecialty}) - ${diag.date}:
+  Diagnosis: ${diag.diagnosis}
+  ${diag.notes ? `Notes: ${diag.notes}` : ''}
+  ${diag.treatmentRecommendations && diag.treatmentRecommendations.length > 0 ? `Treatment Recommendations: ${diag.treatmentRecommendations.join(', ')}` : ''}
+`).join('\n')}
+` : ''}
+
+Please analyze all the above information and provide comprehensive summaries in the following four categories:
+
+1. MEDICAL: Summarize all physical health conditions, medical diagnoses, lab results, imaging studies, medications (current and previous), treatment plans, and medical procedures. Include any changes over time, improvements, or concerns.
+
+2. PSYCHIATRIC: Summarize any mental health diagnoses, psychiatric medications, psychiatric treatment plans, mood-related observations, and psychiatric history. Include any psychiatric conditions mentioned in notes or diagnoses.
+
+3. PSYCHOLOGICAL: Summarize psychological assessments, therapy notes, behavioral observations, cognitive functioning, emotional well-being, coping strategies, and any psychological interventions or recommendations mentioned in provider notes.
+
+4. SOCIAL: Summarize social factors, family history, living situation, support systems, social activities, relationships, work/employment status, and any social determinants of health mentioned in the records.
+
+For each category:
+- Provide a comprehensive summary (8-15 sentences) that synthesizes all relevant information
+- Highlight key trends, changes over time, and important patterns
+- Note any transitions (e.g., medication changes, treatment plan updates)
+- Include relevant details from reports, notes, and diagnoses
+- Use clear, professional medical language while remaining accessible
+
+If a category has no relevant information, provide a brief statement indicating that no information is available for that category.
+
+Format your response as a JSON object with these exact keys:
+{
+  "medical": "comprehensive medical summary here",
+  "psychiatric": "comprehensive psychiatric summary here",
+  "psychological": "comprehensive psychological summary here",
+  "social": "comprehensive social summary here"
+}`;
+
+  try {
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a compassionate medical assistant that provides comprehensive, well-organized patient history summaries. Always use clear, professional medical language while remaining accessible.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 3000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: { message: errorText } };
+      }
+      console.error('OpenAI API Error:', errorData);
+      throw new Error(errorData.error?.message || `OpenAI API error: ${response.statusText} (Status: ${response.status})`);
+    }
+
+    const data = await response.json();
+    console.log('OpenAI API Response:', JSON.stringify(data, null, 2));
+    
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.error('No content in OpenAI response:', data);
+      throw new Error(`No response from OpenAI. Response: ${JSON.stringify(data)}`);
+    }
+
+    // Parse the JSON response - handle markdown code blocks if present
+    try {
+      // Remove markdown code blocks if present
+      let cleanedContent = content.trim();
+      if (cleanedContent.startsWith('```json')) {
+        cleanedContent = cleanedContent.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+      } else if (cleanedContent.startsWith('```')) {
+        cleanedContent = cleanedContent.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+      }
+      
+      const parsedResponse = JSON.parse(cleanedContent);
+      return {
+        medical: parsedResponse.medical || 'No medical history information available.',
+        psychiatric: parsedResponse.psychiatric || 'No psychiatric history information available.',
+        psychological: parsedResponse.psychological || 'No psychological history information available.',
+        social: parsedResponse.social || 'No social history information available.',
+      };
+    } catch (parseError) {
+      console.error('Error parsing OpenAI response:', parseError);
+      console.error('Content that failed to parse:', content);
+      // Fallback: return error messages
+      return {
+        medical: 'Unable to generate medical summary. Please try again.',
+        psychiatric: 'Unable to generate psychiatric summary. Please try again.',
+        psychological: 'Unable to generate psychological summary. Please try again.',
+        social: 'Unable to generate social summary. Please try again.',
+      };
+    }
+  } catch (error) {
+    console.error('Error calling OpenAI API:', error);
+    throw error;
+  }
+}
+
