@@ -6,7 +6,7 @@ import { Card } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Checkbox } from 'expo-checkbox';
-import { generateHistorySummaries, HistorySummary, PatientHistoryData } from '@/services/openai';
+import { generateHistorySummaries, HistorySummary, PatientHistoryData, generateReportSummary, ReportSummary } from '@/services/openai';
 
 interface Report {
   id: number;
@@ -55,6 +55,9 @@ export default function Reports() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   
   // History tab state
   const [historySubTab, setHistorySubTab] = useState<'medical' | 'psychiatric' | 'psychological' | 'social'>('medical');
@@ -388,6 +391,41 @@ export default function Reports() {
       });
     }
   };
+
+  const handleGenerateSummary = async () => {
+    if (!selectedReport) return;
+
+    setIsGeneratingSummary(true);
+    setSummaryError(null);
+
+    try {
+      const summary = await generateReportSummary({
+        title: selectedReport.title,
+        date: selectedReport.date,
+        provider: selectedReport.provider,
+        exam: selectedReport.exam,
+        clinicalHistory: selectedReport.clinicalHistory,
+        technique: selectedReport.technique,
+        findings: selectedReport.findings,
+        impression: selectedReport.impression,
+        interpretedBy: selectedReport.interpretedBy,
+      });
+      setReportSummary(summary);
+    } catch (error) {
+      console.error('Error generating report summary:', error);
+      setSummaryError(error instanceof Error ? error.message : 'Unable to generate summary. Please try again.');
+    } finally {
+      setIsGeneratingSummary(false);
+    }
+  };
+
+  // Reset summary when modal closes or report changes
+  useEffect(() => {
+    if (!showReportModal || !selectedReport) {
+      setReportSummary(null);
+      setSummaryError(null);
+    }
+  }, [showReportModal, selectedReport?.id]);
 
   // Load history data and generate summaries
   const loadHistorySummaries = useCallback(async (isRefresh = false) => {
@@ -845,10 +883,63 @@ export default function Reports() {
                     </Text>
                   )}
                 </View>
+                {/* Summarize Button */}
+                <TouchableOpacity
+                  style={[styles.summarizeButton, { backgroundColor: '#008080' }, isGeneratingSummary && styles.summarizeButtonDisabled]}
+                  onPress={handleGenerateSummary}
+                  disabled={isGeneratingSummary}
+                >
+                  <MaterialIcons name="auto-awesome" size={getScaledFontSize(18)} color="white" />
+                  <Text style={[styles.summarizeButtonText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(600) as any }]}>
+                    Summarize
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Modal Content */}
               <ScrollView style={styles.reportModalContent} contentContainerStyle={styles.reportModalContentContainer}>
+                {/* AI Summary Section */}
+                {reportSummary && (
+                  <View style={styles.reportSection}>
+                    <View style={styles.summaryHeader}>
+                      <View style={styles.summaryHeaderLeft}>
+                        <MaterialIcons name="auto-awesome" size={getScaledFontSize(20)} color="#008080" />
+                        <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
+                          Simple Summary
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={[styles.summaryCard, { backgroundColor: colors.background, borderLeftColor: '#008080' }]}>
+                      <Text style={[styles.summaryReportName, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any, marginBottom: 8 }]}>
+                        {selectedReport.title}
+                      </Text>
+                      <Text style={[styles.summaryReportDate, { color: colors.text, fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any, marginBottom: 12 }]}>
+                        {selectedReport.date} • Generated {new Date(reportSummary.generatedAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </Text>
+                      <Text style={[styles.summaryText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, lineHeight: getScaledFontSize(22) }]}>
+                        {reportSummary.summary}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {summaryError && (
+                  <View style={styles.reportSection}>
+                    <View style={[styles.errorCard, { backgroundColor: '#ffebee', borderLeftColor: '#f44336' }]}>
+                      <MaterialIcons name="error-outline" size={getScaledFontSize(20)} color="#f44336" />
+                      <Text style={[styles.errorText, { color: '#c62828', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                        {summaryError}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
                 {/* Results Section */}
                 <View style={styles.reportSection}>
                   <Text style={[styles.reportSectionTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(700) as any }]}>
@@ -964,6 +1055,21 @@ export default function Reports() {
                   </View>
                 )}
               </ScrollView>
+
+              {/* Loading Overlay for Summary Generation */}
+              {isGeneratingSummary && (
+                <View style={styles.summaryLoadingOverlay}>
+                  <View style={[styles.summaryLoadingOverlayContent, { backgroundColor: colors.background }]}>
+                    <ActivityIndicator size="large" color="#008080" />
+                    <Text style={[styles.summaryLoadingOverlayText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>
+                      Generating summary...
+                    </Text>
+                    <Text style={[styles.summaryLoadingOverlaySubtext, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
+                      Please wait while we create an easy-to-understand summary
+                    </Text>
+                  </View>
+                </View>
+              )}
             </>
           )}
         </SafeAreaView>
@@ -1534,5 +1640,113 @@ const styles = StyleSheet.create({
   loadingOverlayText: {
     marginTop: 16,
     textAlign: 'center',
+  },
+  summarizeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  summarizeButtonDisabled: {
+    opacity: 0.6,
+  },
+  summarizeButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  summaryLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  summaryLoadingOverlayContent: {
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 250,
+    maxWidth: '80%',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  summaryLoadingOverlayText: {
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  summaryLoadingOverlaySubtext: {
+    marginTop: 8,
+    textAlign: 'center',
+    opacity: 0.7,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  summaryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryCard: {
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  summaryReportName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  summaryReportDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  summaryText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    marginBottom: 16,
+    gap: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
