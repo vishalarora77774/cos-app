@@ -517,3 +517,116 @@ Format your response as a JSON object with these exact keys:
   }
 }
 
+export interface ReportSummary {
+  summary: string;
+  generatedAt: string;
+}
+
+/**
+ * Generates a simple, easy-to-understand summary of a medical report for non-medical users
+ * @param reportData - The report data including title, findings, impression, etc.
+ */
+export async function generateReportSummary(reportData: {
+  title: string;
+  date: string;
+  provider?: string;
+  exam?: string;
+  clinicalHistory?: string;
+  technique?: string;
+  findings?: string;
+  impression?: string;
+  interpretedBy?: string;
+}): Promise<ReportSummary> {
+  if (!OPENAI_API_KEY) {
+    console.error('OpenAI API key is missing. Please set EXPO_PUBLIC_OPEN_AI_PUBLIC_KEY in your .env file.');
+    throw new Error('OpenAI API key not configured. Please set EXPO_PUBLIC_OPEN_AI_PUBLIC_KEY in your .env file.');
+  }
+
+  console.log('Calling OpenAI API for report summary');
+
+  // Construct prompt for OpenAI
+  const prompt = `You are a helpful medical assistant that explains medical reports in simple, easy-to-understand language for people who are not medical professionals.
+
+Please analyze the following medical report and provide a clear, simple summary that:
+- Uses everyday language instead of medical jargon
+- Explains what the test/exam was for
+- Describes the findings in plain terms
+- Explains what the results mean for the patient
+- Is easy to understand for someone without medical training
+
+MEDICAL REPORT INFORMATION:
+
+Report Title: ${reportData.title}
+Date: ${reportData.date}
+${reportData.provider ? `Provider: ${reportData.provider}` : ''}
+${reportData.exam ? `Exam: ${reportData.exam}` : ''}
+${reportData.clinicalHistory ? `Clinical History: ${reportData.clinicalHistory}` : ''}
+${reportData.technique ? `Technique: ${reportData.technique}` : ''}
+${reportData.findings ? `Findings: ${reportData.findings}` : ''}
+${reportData.impression ? `Impression: ${reportData.impression}` : ''}
+${reportData.interpretedBy ? `Interpreted By: ${reportData.interpretedBy}` : ''}
+
+Please provide a summary (4-8 sentences) that:
+1. Explains what this report is about in simple terms
+2. Describes the key findings in everyday language
+3. Explains what the results mean for the patient
+4. Uses clear, non-technical language throughout
+
+Important: Avoid medical jargon. If you must use a medical term, explain it in simple words. Make it easy for a non-medical person to understand.`;
+
+  try {
+    const response = await fetch(OPENAI_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a compassionate medical assistant that explains medical reports in simple, clear language for non-medical users. Always use everyday language and avoid complex medical terms.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: { message: errorText } };
+      }
+      console.error('OpenAI API Error:', errorData);
+      throw new Error(errorData.error?.message || `OpenAI API error: ${response.statusText} (Status: ${response.status})`);
+    }
+
+    const data = await response.json();
+    console.log('OpenAI API Response for report summary:', JSON.stringify(data, null, 2));
+    
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.error('No content in OpenAI response:', data);
+      throw new Error(`No response from OpenAI. Response: ${JSON.stringify(data)}`);
+    }
+
+    return {
+      summary: content.trim(),
+      generatedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error('Error calling OpenAI API for report summary:', error);
+    throw error;
+  }
+}
+
