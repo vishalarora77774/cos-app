@@ -28,7 +28,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>cos</string>
-				<string>com.anonymous.CoS</string>
+				<string>com.joinabrightfuture.cos</string>
 			</array>
 		</dict>
 	</array>

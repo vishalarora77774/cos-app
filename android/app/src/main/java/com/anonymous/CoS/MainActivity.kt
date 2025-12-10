@@ -1,4 +1,4 @@
-package com.anonymous.CoS
+package com.joinabrightfuture.cos
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
