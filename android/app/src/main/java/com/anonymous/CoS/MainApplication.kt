@@ -1,4 +1,4 @@
-package com.anonymous.CoS
+package com.joinabrightfuture.cos
 
 import android.app.Application
 import android.content.res.Configuration
