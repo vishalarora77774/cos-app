@@ -1,10 +1,11 @@
 import { AppWrapper } from '@/components/app-wrapper';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Button, Card, List } from 'react-native-paper';
 
 // Helper function to detect if device is a tablet
@@ -349,12 +350,464 @@ const generateDoctors = (isTablet: boolean): Doctor[] => {
   return doctors;
 };
 
+// Provider data structure matching modal.tsx
+const departments = [
+  {
+    id: 'cardiology',
+    name: 'Cardiology',
+    doctors: [
+      { id: 'd1', name: 'Dr. Alice Heart', qualifications: 'MD, FACC', image: require('@/assets/images/dummy.jpg') },
+      { id: 'd2', name: 'Dr. Robert Valve', qualifications: 'MD, FSCAI', image: require('@/assets/images/dummy.jpg') },
+    ],
+  },
+  {
+    id: 'neurology',
+    name: 'Neurology',
+    doctors: [
+      { id: 'd3', name: 'Dr. Nina Neuron', qualifications: 'MD, FAAN', image: require('@/assets/images/dummy.jpg') },
+      { id: 'd4', name: 'Dr. Brian Synapse', qualifications: 'MD, PhD', image: require('@/assets/images/dummy.jpg') },
+    ],
+  },
+  {
+    id: 'pediatrics',
+    name: 'Pediatrics',
+    doctors: [
+      { id: 'd5', name: 'Dr. Peter Care', qualifications: 'MD, FAAP', image: require('@/assets/images/dummy.jpg') },
+      { id: 'd6', name: 'Dr. Paula Smile', qualifications: 'MD, DCH', image: require('@/assets/images/dummy.jpg') },
+    ],
+  },
+  {
+    id: 'orthopedics',
+    name: 'Orthopedics',
+    doctors: [
+      { id: 'd7', name: 'Dr. Olivia Joint', qualifications: 'MS, DNB (Ortho)', image: require('@/assets/images/dummy.jpg') },
+      { id: 'd8', name: 'Dr. Max Bone', qualifications: 'MS Ortho', image: require('@/assets/images/dummy.jpg') },
+    ],
+  },
+];
+
+// Circle Providers List View Component (shows providers from circle)
+interface CircleProvidersListViewProps {
+  doctors: Array<Doctor>;
+  userImg: any;
+  colors: any;
+  getScaledFontSize: (size: number) => number;
+  getScaledFontWeight: (weight: number) => string | number;
+}
+
+function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight }: CircleProvidersListViewProps) {
+  // Calculate max height to push appointments to bottom of screen
+  const screenHeight = Dimensions.get('window').height;
+  const maxListHeight = Math.min(screenHeight * 0.65, 600);
+
+  return (
+    <View style={styles.listContainer}>
+      <ScrollView
+        style={[
+          styles.listScrollView,
+          {
+            maxHeight: maxListHeight,
+            borderWidth: 1,
+            borderColor: colors.text + '15',
+            borderRadius: getScaledFontSize(12),
+          }
+        ]}
+        contentContainerStyle={styles.listScrollContent}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
+        <TouchableOpacity
+          style={[
+            styles.listItem,
+            {
+              borderBottomColor: colors.text + '20',
+              paddingVertical: getScaledFontSize(16),
+              paddingHorizontal: getScaledFontSize(16),
+            }
+          ]}
+          onPress={() => router.push('/Home/today-schedule')}
+          activeOpacity={0.7}
+        >
+          <Avatar.Image source={userImg} size={getScaledFontSize(56)} style={styles.listAvatar} />
+          <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+            <Text style={[
+              styles.listItemName,
+              {
+                fontSize: getScaledFontSize(16),
+                fontWeight: getScaledFontWeight(600) as any,
+                color: colors.text,
+                marginBottom: getScaledFontSize(4),
+              }
+            ]}>Jenny Wilson</Text>
+            <Text style={[
+              styles.listItemRole,
+              {
+                fontSize: getScaledFontSize(14),
+                fontWeight: getScaledFontWeight(400) as any,
+                color: colors.text + '80',
+              }
+            ]}>Patient</Text>
+          </View>
+        </TouchableOpacity>
+        {doctors.map((doctor) => {
+          const isCareManager = doctor.role === 'care_manager';
+          const roleLabel = isCareManager ? 'Care Manager' : doctor.role === 'provider' ? 'Provider' : 'Doctor on Demand';
+          return (
+            <TouchableOpacity
+              key={`circle-provider-${doctor.key}`}
+              style={[
+                styles.listItem,
+                {
+                  borderBottomColor: colors.text + '20',
+                  paddingVertical: getScaledFontSize(16),
+                  paddingHorizontal: getScaledFontSize(16),
+                }
+              ]}
+              onPress={() => router.push('/(doctor-detail)?name=Dr. Max K.')}
+              activeOpacity={0.7}
+            >
+              <Avatar.Image source={userImg} size={getScaledFontSize(56)} style={styles.listAvatar} />
+              <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+                <Text style={[
+                  styles.listItemName,
+                  {
+                    fontSize: getScaledFontSize(16),
+                    fontWeight: getScaledFontWeight(600) as any,
+                    color: colors.text,
+                    marginBottom: getScaledFontSize(4),
+                  }
+                ]}>Kendrick L.</Text>
+                <Text style={[
+                  styles.listItemRole,
+                  {
+                    fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(400) as any,
+                    color: colors.text + '80',
+                  }
+                ]}>{roleLabel}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+// List View Component (departments list)
+interface ListViewProps {
+  doctors: Array<Doctor>;
+  userImg: any;
+  colors: any;
+  getScaledFontSize: (size: number) => number;
+  getScaledFontWeight: (weight: number) => string | number;
+  onItemPress: () => void;
+}
+
+function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight, onItemPress }: ListViewProps) {
+  // Calculate max height to push appointments to bottom of screen
+  const screenHeight = Dimensions.get('window').height;
+  // Use larger percentage to push appointments section to bottom
+  const maxListHeight = Math.min(screenHeight * 0.65, 600); // Max 65% of screen or 600px, whichever is smaller
+
+  return (
+    <View style={styles.listContainer}>
+      <ScrollView
+        style={[
+          styles.listScrollView,
+          {
+            maxHeight: maxListHeight,
+            borderWidth: 1,
+            borderColor: colors.text + '15',
+            borderRadius: getScaledFontSize(12),
+          }
+        ]}
+        contentContainerStyle={styles.listScrollContent}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
+        <TouchableOpacity
+          style={[
+            styles.listItem,
+            {
+              borderBottomColor: colors.text + '20',
+              paddingVertical: getScaledFontSize(16),
+              paddingHorizontal: getScaledFontSize(16),
+            }
+          ]}
+          onPress={() => router.push('/Home/today-schedule')}
+          activeOpacity={0.7}
+        >
+          <Avatar.Image source={userImg} size={getScaledFontSize(56)} style={styles.listAvatar} />
+          <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+            <Text style={[
+              styles.listItemName,
+              {
+                fontSize: getScaledFontSize(16),
+                fontWeight: getScaledFontWeight(600) as any,
+                color: colors.text,
+                marginBottom: getScaledFontSize(4),
+              }
+            ]}>Jenny Wilson</Text>
+            <Text style={[
+              styles.listItemRole,
+              {
+                fontSize: getScaledFontSize(14),
+                fontWeight: getScaledFontWeight(400) as any,
+                color: colors.text + '80',
+              }
+            ]}>Patient</Text>
+          </View>
+        </TouchableOpacity>
+        {doctors.map((doctor, idx) => {
+          const isCareManager = doctor.role === 'care_manager';
+          const roleLabel = isCareManager ? 'Care Manager' : doctor.role === 'provider' ? 'Provider' : 'Doctor on Demand';
+          return (
+            <TouchableOpacity
+              key={`list-doctor-${doctor.key}`}
+              style={[
+                styles.listItem,
+                {
+                  borderBottomColor: colors.text + '20',
+                  paddingVertical: getScaledFontSize(16),
+                  paddingHorizontal: getScaledFontSize(16),
+                }
+              ]}
+              onPress={onItemPress}
+              activeOpacity={0.7}
+            >
+              <Avatar.Image source={userImg} size={getScaledFontSize(56)} style={styles.listAvatar} />
+              <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+                <Text style={[
+                  styles.listItemName,
+                  {
+                    fontSize: getScaledFontSize(16),
+                    fontWeight: getScaledFontWeight(600) as any,
+                    color: colors.text,
+                    marginBottom: getScaledFontSize(4),
+                  }
+                ]}>Kendrick L.</Text>
+                <Text style={[
+                  styles.listItemRole,
+                  {
+                    fontSize: getScaledFontSize(14),
+                    fontWeight: getScaledFontWeight(400) as any,
+                    color: colors.text + '80',
+                  }
+                ]}>{roleLabel}</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+// Provider Details List Component (replaces main list)
+interface ProviderDetailsListProps {
+  colors: any;
+  getScaledFontSize: (size: number) => number;
+  getScaledFontWeight: (weight: number) => string | number;
+  onBack: () => void;
+}
+
+function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, onBack }: ProviderDetailsListProps) {
+  // Calculate max height to push appointments to bottom of screen
+  const screenHeight = Dimensions.get('window').height;
+  const maxListHeight = Math.min(screenHeight * 0.65, 600);
+
+  // Flatten all doctors from all departments into a single list
+  const allProviders = React.useMemo(() => {
+    const providers: Array<{ id: string; name: string; qualifications: string; image: any }> = [];
+    departments.forEach((dept) => {
+      dept.doctors.forEach((doc) => {
+        providers.push(doc);
+      });
+    });
+    return providers;
+  }, []);
+
+  return (
+    <View style={styles.listContainer}>
+      <View style={[
+        styles.detailsListHeader,
+        {
+          borderBottomColor: colors.text + '20',
+          paddingHorizontal: getScaledFontSize(16),
+          paddingVertical: getScaledFontSize(12),
+          marginBottom: getScaledFontSize(8),
+        }
+      ]}>
+        <TouchableOpacity onPress={onBack} style={{ padding: getScaledFontSize(4) }}>
+          <IconSymbol name="chevron.right" size={getScaledFontSize(24)} color={colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
+        </TouchableOpacity>
+        <Text style={[
+          styles.detailsListTitle,
+          {
+            fontSize: getScaledFontSize(18),
+            fontWeight: getScaledFontWeight(600) as any,
+            color: colors.text,
+            flex: 1,
+            marginLeft: getScaledFontSize(8),
+          }
+        ]}>
+          All Providers
+        </Text>
+      </View>
+      <ScrollView
+        style={[
+          styles.listScrollView,
+          {
+            maxHeight: maxListHeight,
+            borderWidth: 1,
+            borderColor: colors.text + '15',
+            borderRadius: getScaledFontSize(12),
+          }
+        ]}
+        contentContainerStyle={styles.listScrollContent}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
+        {allProviders.map((doc) => (
+          <TouchableOpacity
+            key={doc.id}
+            style={[
+              styles.listItem,
+              {
+                borderBottomColor: colors.text + '20',
+                paddingVertical: getScaledFontSize(16),
+                paddingHorizontal: getScaledFontSize(16),
+              }
+            ]}
+            activeOpacity={0.7}
+          >
+            <Avatar.Image 
+              source={doc.image} 
+              size={getScaledFontSize(56)} 
+              style={styles.listAvatar} 
+            />
+            <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+              <Text style={[
+                styles.listItemName,
+                {
+                  fontSize: getScaledFontSize(16),
+                  fontWeight: getScaledFontWeight(600) as any,
+                  color: colors.text,
+                  marginBottom: getScaledFontSize(4),
+                }
+              ]}>
+                {doc.name}
+              </Text>
+              <Text style={[
+                styles.listItemRole,
+                {
+                  fontSize: getScaledFontSize(14),
+                  fontWeight: getScaledFontWeight(400) as any,
+                  color: colors.text + '80',
+                }
+              ]}>
+                {doc.qualifications}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const { getScaledFontSize, settings, getScaledFontWeight } = useAccessibility();
   const userImg = require('@/assets/images/dummy.jpg');
   const isTabletDevice = isTablet();
   const doctors = React.useMemo(() => generateDoctors(isTabletDevice), [isTabletDevice]);
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  const [viewMode, setViewMode] = React.useState<'circle' | 'list' | 'circle-providers'>('circle');
+  
+  // Cycle through views: circle -> list -> circle-providers -> circle
+  const toggleViewMode = () => {
+    if (viewMode === 'circle') {
+      setViewMode('list');
+    } else if (viewMode === 'list') {
+      setViewMode('circle-providers');
+    } else {
+      setViewMode('circle');
+    }
+  };
+  
+  // Get icon based on current view (shows what you'll switch to)
+  const getToggleIcon = () => {
+    if (viewMode === 'circle') {
+      return 'list.bullet'; // Will switch to list
+    } else if (viewMode === 'list') {
+      return 'person.fill'; // Will switch to circle-providers
+    } else {
+      return 'circle.fill'; // Will switch back to circle
+    }
+  };
+  const [showProviderDetails, setShowProviderDetails] = React.useState(false);
+  
+  // Animation values for sliding between main list and details list
+  const screenWidth = Dimensions.get('window').width;
+  const mainListSlide = React.useRef(new Animated.Value(0)).current;
+  const detailsListSlide = React.useRef(new Animated.Value(screenWidth)).current;
+  const mainListOpacity = React.useRef(new Animated.Value(1)).current;
+  const detailsListOpacity = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (showProviderDetails) {
+      // Slide in details list from right, slide out main list to left
+      Animated.parallel([
+        Animated.timing(mainListSlide, {
+          toValue: -screenWidth,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(detailsListSlide, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(mainListOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(detailsListOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Slide back to main list
+      Animated.parallel([
+        Animated.timing(mainListSlide, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(detailsListSlide, {
+          toValue: screenWidth,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(mainListOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(detailsListOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showProviderDetails, screenWidth]);
+
   return (
     <AppWrapper notificationCount={3}>
       <ScrollView 
@@ -363,27 +816,99 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.circleSection}>
-          <Text style={[
-            styles.sectionTitle, 
-            { 
-              fontSize: getScaledFontSize(24), 
-              fontWeight: getScaledFontWeight(600) as any, 
-              color: colors.text,
-              paddingBottom: 50
-            }
-          ]}>
-            Jenny's Circle of Support
-          </Text>
-          {isTabletDevice ? (
-            <TabletCircleView 
-              doctors={doctors}
-              userImg={userImg}
-              colors={colors}
-              getScaledFontSize={getScaledFontSize}
-              getScaledFontWeight={getScaledFontWeight}
-            />
+          <View style={styles.titleRow}>
+            <Text style={[
+              styles.sectionTitle, 
+              { 
+                fontSize: getScaledFontSize(24), 
+                fontWeight: getScaledFontWeight(600) as any, 
+                color: colors.text,
+                paddingBottom: 50,
+                flex: 1,
+              }
+            ]}>
+              Jenny's Circle of Support
+            </Text>
+            <TouchableOpacity
+              onPress={toggleViewMode}
+              style={[
+                styles.toggleButton,
+                {
+                  backgroundColor: colors.text + '10',
+                  padding: getScaledFontSize(10),
+                  borderRadius: getScaledFontSize(8),
+                  marginBottom: 50,
+                }
+              ]}
+              activeOpacity={0.7}
+            >
+              <IconSymbol 
+                name={getToggleIcon()} 
+                size={getScaledFontSize(24)} 
+                color={colors.tint || '#008080'} 
+              />
+            </TouchableOpacity>
+          </View>
+          {viewMode === 'circle' ? (
+            isTabletDevice ? (
+              <TabletCircleView 
+                doctors={doctors}
+                userImg={userImg}
+                colors={colors}
+                getScaledFontSize={getScaledFontSize}
+                getScaledFontWeight={getScaledFontWeight}
+              />
+            ) : (
+              <PhoneCircleView 
+                doctors={doctors}
+                userImg={userImg}
+                colors={colors}
+                getScaledFontSize={getScaledFontSize}
+                getScaledFontWeight={getScaledFontWeight}
+              />
+            )
+          ) : viewMode === 'list' ? (
+            <View style={styles.listViewContainer}>
+              <Animated.View
+                style={[
+                  styles.listViewWrapper,
+                  {
+                    opacity: mainListOpacity,
+                    transform: [{ translateX: mainListSlide }],
+                  }
+                ]}
+                pointerEvents={showProviderDetails ? 'none' : 'auto'}
+              >
+                <ListView
+                  doctors={doctors}
+                  userImg={userImg}
+                  colors={colors}
+                  getScaledFontSize={getScaledFontSize}
+                  getScaledFontWeight={getScaledFontWeight}
+                  onItemPress={() => setShowProviderDetails(true)}
+                />
+              </Animated.View>
+              <Animated.View
+                style={[
+                  styles.listViewWrapper,
+                  styles.detailsListWrapper,
+                  {
+                    opacity: detailsListOpacity,
+                    transform: [{ translateX: detailsListSlide }],
+                  }
+                ]}
+                pointerEvents={showProviderDetails ? 'auto' : 'none'}
+              >
+                <ProviderDetailsList
+                  colors={colors}
+                  getScaledFontSize={getScaledFontSize}
+                  getScaledFontWeight={getScaledFontWeight}
+                  onBack={() => setShowProviderDetails(false)}
+                />
+              </Animated.View>
+            </View>
           ) : (
-            <PhoneCircleView 
+            <CircleProvidersListView
               doctors={doctors}
               userImg={userImg}
               colors={colors}
@@ -717,5 +1242,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '400',
     color: '#666',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 0,
+  },
+  toggleButton: {
+    // Styles applied inline
+  },
+  listContainer: {
+    width: '100%',
+    paddingHorizontal: 0,
+  },
+  listScrollView: {
+    width: '100%',
+  },
+  listScrollContent: {
+    paddingBottom: 0,
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    width: '100%',
+  },
+  listAvatar: {
+    backgroundColor: 'transparent',
+  },
+  listItemName: {
+    // Styles applied inline
+  },
+  listItemRole: {
+    // Styles applied inline
+  },
+  listViewContainer: {
+    width: '100%',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  listViewWrapper: {
+    width: '100%',
+  },
+  detailsListWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  detailsListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+  },
+  detailsListTitle: {
+    // Styles applied inline
+  },
+  categorySection: {
+    width: '100%',
+  },
+  categoryHeader: {
+    // Styles applied inline
   },
 });
