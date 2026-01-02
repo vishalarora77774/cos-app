@@ -21,7 +21,7 @@ const MAPPING = {
   'sparkles': 'auto-awesome',
   'doc.text': 'description',
   'line.3.horizontal': 'menu',
-  'list.bullet': 'menu',
+  'list.bullet': 'format-list-bulleted',
   'accessibility': 'accessibility',
   'bell.fill': 'notifications',
   'xmark': 'close',
