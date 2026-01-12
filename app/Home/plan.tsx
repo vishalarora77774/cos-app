@@ -10,8 +10,9 @@ import { HealthMetricCard } from '@/components/ui/health-metric-card';
 import { GrowthChart, DataPoint } from '@/components/ui/growth-chart';
 import { TreatmentProgress, TreatmentGoal } from '@/components/ui/treatment-progress';
 import { initializeHealthKit, getTodayHealthMetrics, HealthMetrics } from '@/services/health';
+import { transformFastenHealthData } from '@/services/fasten-health';
 
-// Mock health data - In a real app, this would come from your API
+// Mock health data - Fallback if Fasten Health data is not available
 const getMockHealthData = (): HealthSummary => ({
   treatmentPlan: {
     plan: 'Diabetes management and cardiovascular health monitoring',
@@ -362,8 +363,24 @@ export default function PlanScreen() {
         metricsToUse = await askAboutHealthData();
       }
       
-      const mockHealthData = getMockHealthData();
-      setHealthData(mockHealthData);
+      // Try to load Fasten Health data, fallback to mock data
+      let healthDataToUse: HealthSummary;
+      try {
+        healthDataToUse = await transformFastenHealthData();
+        // If Fasten Health data is empty or incomplete, use mock data
+        if (!healthDataToUse.medicalReports || healthDataToUse.medicalReports.length === 0) {
+          console.log('Fasten Health data is empty, using mock data');
+          healthDataToUse = getMockHealthData();
+        } else {
+          console.log(`Loaded ${healthDataToUse.medicalReports.length} medical reports from Fasten Health`);
+        }
+      } catch (error) {
+        console.error('Error loading Fasten Health data:', error);
+        console.log('Falling back to mock data');
+        healthDataToUse = getMockHealthData();
+      }
+      
+      setHealthData(healthDataToUse);
       
       // Log health metrics being sent to OpenAI
       if (metricsToUse) {
@@ -380,7 +397,7 @@ export default function PlanScreen() {
       
       console.log('Calling generateHealthSuggestions with isRefresh:', isRefresh, 'healthMetrics:', metricsToUse);
       // Pass isRefresh flag and health metrics to get fresh, varied responses on each refresh
-      const suggestion = await generateHealthSuggestions(mockHealthData, isRefresh, metricsToUse);
+      const suggestion = await generateHealthSuggestions(healthDataToUse, isRefresh, metricsToUse);
       console.log('Received suggestion from OpenAI:', suggestion);
       // Replace content with fresh AI-generated response
       setAiSuggestion(suggestion);

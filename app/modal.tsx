@@ -4,58 +4,47 @@ import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from 'react-native-paper';
 import { Tabs, TabScreen, TabsProvider } from 'react-native-paper-tabs';
+import { getFastenPractitionersByDepartment, Provider } from '@/services/fasten-health';
 
+
+interface Department {
+  id: string;
+  name: string;
+  doctors: Provider[];
+}
 
 export default function ModalScreen() {
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  const [departments, setDepartments] = React.useState<Department[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   const closeModal = () => {
     router.back();
   };
 
-  const departments = React.useMemo(
-    () => [
-      {
-        id: 'cardiology',
-        name: 'Cardiology',
-        doctors: [
-          { id: 'd1', name: 'Dr. Alice Heart', qualifications: 'MD, FACC', image: require('@/assets/images/dummy.jpg') },
-          { id: 'd2', name: 'Dr. Robert Valve', qualifications: 'MD, FSCAI', image: require('@/assets/images/dummy.jpg') },
-        ],
-      },
-      {
-        id: 'neurology',
-        name: 'Neurology',
-        doctors: [
-          { id: 'd3', name: 'Dr. Nina Neuron', qualifications: 'MD, FAAN', image: require('@/assets/images/dummy.jpg') },
-          { id: 'd4', name: 'Dr. Brian Synapse', qualifications: 'MD, PhD', image: require('@/assets/images/dummy.jpg') },
-        ],
-      },
-      {
-        id: 'pediatrics',
-        name: 'Pediatrics',
-        doctors: [
-          { id: 'd5', name: 'Dr. Peter Care', qualifications: 'MD, FAAP', image: require('@/assets/images/dummy.jpg') },
-          { id: 'd6', name: 'Dr. Paula Smile', qualifications: 'MD, DCH', image: require('@/assets/images/dummy.jpg') },
-        ],
-      },
-      {
-        id: 'orthopedics',
-        name: 'Orthopedics',
-        doctors: [
-          { id: 'd7', name: 'Dr. Olivia Joint', qualifications: 'MS, DNB (Ortho)', image: require('@/assets/images/dummy.jpg') },
-          { id: 'd8', name: 'Dr. Max Bone', qualifications: 'MS Ortho', image: require('@/assets/images/dummy.jpg') },
-        ],
-      },
-    ],
-    []
-  );
+  // Load providers from Fasten Health
+  React.useEffect(() => {
+    const loadProviders = async () => {
+      setIsLoading(true);
+      try {
+        const depts = await getFastenPractitionersByDepartment();
+        setDepartments(depts);
+        console.log(`Loaded ${depts.length} departments with providers`);
+      } catch (error) {
+        console.error('Error loading providers:', error);
+        // Fallback to empty array or default departments if needed
+        setDepartments([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const [selectedDepartmentId, setSelectedDepartmentId] = React.useState(departments[0]?.id);
+    loadProviders();
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -71,43 +60,67 @@ export default function ModalScreen() {
         </TouchableOpacity>
       </View>
       
-      <TabsProvider
-        defaultIndex={0}
-        // onChangeIndex={handleChangeIndex} optional
-      >
-      <Tabs
-        showLeadingSpace={false}
-        showTextLabel={true}
-        uppercase={true}
-        mode="scrollable"
-        tabLabelStyle={{ 
-          fontSize: getScaledFontSize(14), 
-          fontWeight: getScaledFontWeight(500) as any,
-          paddingHorizontal: Math.max(8, getScaledFontSize(14) / 2), // Add padding based on font size
-          textAlign: 'center' // Center the text
-        }}
-        dark={settings.isDarkTheme}
-      >
-        {departments.map((dept) => (
-          <TabScreen
-            key={dept.id}
-            label={dept.name}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.tint} />
+          <Text style={[styles.loadingText, { color: colors.text, fontSize: getScaledFontSize(14) }]}>
+            Loading providers...
+          </Text>
+        </View>
+      ) : departments.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, { color: colors.text, fontSize: getScaledFontSize(16) }]}>
+            No providers available
+          </Text>
+        </View>
+      ) : (
+        <TabsProvider
+          defaultIndex={0}
+          // onChangeIndex={handleChangeIndex} optional
+        >
+          <Tabs
+            showLeadingSpace={false}
+            showTextLabel={true}
+            uppercase={true}
+            mode="scrollable"
+            tabLabelStyle={{ 
+              fontSize: getScaledFontSize(14), 
+              fontWeight: getScaledFontWeight(500) as any,
+              paddingHorizontal: Math.max(8, getScaledFontSize(14) / 2), // Add padding based on font size
+              textAlign: 'center', // Center the text
+              lineHeight: getScaledFontSize(20) // Add line height
+            }}
+            dark={settings.isDarkTheme}
           >
-            <ScrollView contentContainerStyle={styles.cardsContainer}>
-              {dept.doctors.map((doc) => (
-                <DoctorCard
-                  key={doc.id}
-                  id={doc.id}
-                  name={doc.name}
-                  qualifications={doc.qualifications}
-                  image={doc.image}
-                />
-              ))}
-            </ScrollView>
-          </TabScreen>
-        ))}
-      </Tabs>
-      </TabsProvider>
+            {departments.map((dept) => (
+              <TabScreen
+                key={dept.id}
+                label={dept.name}
+              >
+                <ScrollView contentContainerStyle={styles.cardsContainer}>
+                  {dept.doctors.length === 0 ? (
+                    <View style={styles.emptyDepartmentContainer}>
+                      <Text style={[styles.emptyText, { color: colors.text, fontSize: getScaledFontSize(14) }]}>
+                        No providers in this department
+                      </Text>
+                    </View>
+                  ) : (
+                    dept.doctors.map((provider) => (
+                      <DoctorCard
+                        key={provider.id}
+                        id={provider.id}
+                        name={provider.name}
+                        qualifications={provider.qualifications || 'Healthcare Provider'}
+                        image={provider.image || undefined}
+                      />
+                    ))
+                  )}
+                </ScrollView>
+              </TabScreen>
+            ))}
+          </Tabs>
+        </TabsProvider>
+      )}
     </View>
   );
 }
@@ -147,5 +160,27 @@ const styles = StyleSheet.create({
   cardsContainer: {
     padding: 16,
     gap: 12,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    marginTop: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    textAlign: 'center',
+  },
+  emptyDepartmentContainer: {
+    padding: 20,
+    alignItems: 'center',
   },
 });

@@ -2,6 +2,7 @@ import { useAccessibility } from '@/stores/accessibility-store';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Avatar, Card, Switch, Text } from 'react-native-paper';
+import { InitialsAvatar } from '@/utils/avatar-utils';
 
 interface DoctorCardProps {
   id: string;
@@ -34,11 +35,19 @@ export function DoctorCard({
     <Card style={[styles.card, { marginBottom: cardMargin }]} onPress={onPress}>
       <Card.Content style={[styles.cardContent, { padding: dynamicPadding }]}>
         <View style={styles.contentRow}>
-          <Avatar.Image
-            size={avatarSize}
-            source={image}
-            style={[styles.avatar, { marginRight: dynamicPadding }]}
-          />
+          {image ? (
+            <Avatar.Image
+              size={avatarSize}
+              source={image}
+              style={[styles.avatar, { marginRight: dynamicPadding }]}
+            />
+          ) : (
+            <InitialsAvatar
+              name={name}
+              size={avatarSize}
+              style={[styles.avatar, { marginRight: dynamicPadding }]}
+            />
+          )}
           <View style={styles.textContainer}>
             <Text 
               style={[

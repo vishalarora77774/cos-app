@@ -1,22 +1,45 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar, Button, Card, Icon, List } from 'react-native-paper';
+import { getFastenPatient } from '@/services/fasten-health';
+import { InitialsAvatar } from '@/utils/avatar-utils';
 
 export default function ProfileScreen() {
   const userImg = require('@/assets/images/dummy.jpg');
   const { settings, getScaledFontWeight, getScaledFontSize } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  
+  const [patientName, setPatientName] = useState('Jenny Wilson');
+  const [patientEmail, setPatientEmail] = useState('jenny.wilson@email.com');
+  
+  // Load patient data from Fasten Health
+  useEffect(() => {
+    const loadPatientData = async () => {
+      try {
+        const patient = await getFastenPatient();
+        if (patient) {
+          setPatientName(patient.name || 'Jenny Wilson');
+          setPatientEmail(patient.email || 'jenny.wilson@email.com');
+          console.log('Loaded patient data for profile:', patient.name);
+        }
+      } catch (error) {
+        console.error('Error loading patient data:', error);
+      }
+    };
+    
+    loadPatientData();
+  }, []);
 
   return (
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Avatar.Image source={userImg} size={80} style={styles.avatar} />
-          <Text style={[styles.name, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>Jenny Wilson</Text>
-          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>jenny.wilson@email.com</Text>
-        </View>
+        <ScrollView style={[styles.container, { backgroundColor: colors.background }]} showsVerticalScrollIndicator={false}>
+          <View style={styles.header}>
+            <InitialsAvatar name={patientName} size={80} style={styles.avatar} />
+            <Text style={[styles.name, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>{patientName}</Text>
+            <Text style={[{ color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>{patientEmail}</Text>
+          </View>
 
         <View style={styles.menuSection}>
           <Card style={styles.menuCard}>

@@ -7,6 +7,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Checkbox } from 'expo-checkbox';
 import { generateHistorySummaries, HistorySummary, PatientHistoryData, generateReportSummary, ReportSummary } from '@/services/openai';
+import { getFastenDiagnosticReports, Report as FastenReport } from '@/services/fasten-health';
 
 interface Report {
   id: number;
@@ -65,6 +66,28 @@ export default function Reports() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isRefreshingHistory, setIsRefreshingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  
+  // Fasten Health reports state
+  const [fastenReports, setFastenReports] = useState<Report[]>([]);
+  const [isLoadingFastenReports, setIsLoadingFastenReports] = useState(false);
+  
+  // Load Fasten Health reports on mount
+  useEffect(() => {
+    const loadFastenReports = async () => {
+      setIsLoadingFastenReports(true);
+      try {
+        const reports = await getFastenDiagnosticReports();
+        setFastenReports(reports);
+        console.log(`Loaded ${reports.length} reports from Fasten Health`);
+      } catch (error) {
+        console.error('Error loading Fasten Health reports:', error);
+      } finally {
+        setIsLoadingFastenReports(false);
+      }
+    };
+    
+    loadFastenReports();
+  }, []);
 
   const tabs = [
     { id: 'all', label: 'All Reports' },
@@ -339,7 +362,9 @@ export default function Reports() {
   );
 
   const getFilteredReports = () => {
-    let filtered = allReports;
+    // Use Fasten Health reports if available, otherwise fall back to mock data
+    const reportsToUse = fastenReports.length > 0 ? fastenReports : allReports;
+    let filtered = reportsToUse;
 
     // Filter by active tab category
     if (activeTab !== 'all') {

@@ -2,16 +2,32 @@ import { DoctorCard } from '@/components/ui/doctor-card';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Alert, Platform } from 'react-native';
 import { Avatar, Card } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { getFastenPractitionerById, Provider, getProviderDiagnosesAndTreatmentPlans, getProviderProgressNotes, getProviderAppointments, TreatmentPlanItem, ProgressNote, ProviderAppointment } from '@/services/fasten-health';
+import { InitialsAvatar } from '@/utils/avatar-utils';
 
 export default function DoctorDetailScreen() {
   const params = useLocalSearchParams();
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
-  const doctorName = params.name as string || 'Dr. Max K.';
+  
+  const [provider, setProvider] = useState<Provider | null>(null);
+  const [isLoadingProvider, setIsLoadingProvider] = useState(false);
+  const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlanItem[]>([]);
+  const [progressNotes, setProgressNotes] = useState<ProgressNote[]>([]);
+  const [appointments, setAppointments] = useState<ProviderAppointment[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  
+  // Get provider data from params or load by ID
+  const providerId = params.id as string | undefined;
+  const providerName = params.name as string || 'Dr. Max K.';
+  const providerQualifications = params.qualifications as string || 'MD, Physical Medicine & Rehabilitation';
+  const providerSpecialty = params.specialty as string || 'General';
+  
+  const doctorName = provider?.name || providerName;
   const doctorImage = require('@/assets/images/dummy.jpg');
 
   const [activeTab, setActiveTab] = useState('treatment');
@@ -23,9 +39,61 @@ export default function DoctorDetailScreen() {
   });
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Doctor contact information (you can get these from params or API)
-  const doctorPhone = params.phone as string || '+1234567890';
-  const doctorEmail = params.email as string || 'doctor@example.com';
+  // Load provider details and related data if ID is provided
+  useEffect(() => {
+    const loadProviderData = async () => {
+      const effectiveProviderId = providerId || 'unknown';
+      
+      if (providerId && providerId !== 'unknown') {
+        setIsLoadingProvider(true);
+        setIsLoadingData(true);
+        try {
+          const providerData = await getFastenPractitionerById(providerId);
+          if (providerData) {
+            setProvider(providerData);
+          }
+          
+          // Load provider-specific data
+          const [plans, notes, apts] = await Promise.all([
+            getProviderDiagnosesAndTreatmentPlans(providerId),
+            getProviderProgressNotes(providerId),
+            getProviderAppointments(providerId),
+          ]);
+          
+          setTreatmentPlans(plans);
+          setProgressNotes(notes);
+          setAppointments(apts);
+        } catch (error) {
+          console.error('Error loading provider data:', error);
+        } finally {
+          setIsLoadingProvider(false);
+          setIsLoadingData(false);
+        }
+      } else {
+        // Use params data if available
+        setProvider({
+          id: effectiveProviderId,
+          name: providerName,
+          qualifications: providerQualifications,
+          specialty: providerSpecialty,
+          phone: params.phone as string,
+          email: params.email as string,
+        });
+        // Set empty arrays for data when no provider ID
+        setTreatmentPlans([]);
+        setProgressNotes([]);
+        setAppointments([]);
+      }
+    };
+    
+    loadProviderData();
+  }, [providerId, providerName, providerQualifications, providerSpecialty]);
+
+  // Doctor contact information
+  const doctorPhone = provider?.phone || params.phone as string || '+1234567890';
+  const doctorEmail = provider?.email || params.email as string || 'doctor@example.com';
+  const doctorQualifications = provider?.qualifications || providerQualifications;
+  const doctorSpecialty = provider?.specialty || providerSpecialty;
 
   const handleCall = async () => {
     const url = `tel:${doctorPhone}`;
@@ -151,26 +219,7 @@ export default function DoctorDetailScreen() {
     }
   };
 
-  const treatmentPlans = [
-    {
-      id: 1,
-      title: 'Current Diagnosis & Treatment Plan',
-      status: 'Active',
-      date: 'Started Nov 15, 2024',
-      diagnosis: 'Chronic lower back pain with muscle tension and limited range of motion',
-      description: 'Physical therapy for lower back pain with weekly sessions',
-      medications: ['Ibuprofen 400mg', 'Muscle relaxant'],
-    },
-    {
-      id: 2,
-      title: 'Previous Diagnosis & Treatment Recommendations',
-      status: 'Completed',
-      date: 'Aug 10 - Nov 14, 2024',
-      diagnosis: 'Acute lower back pain with suspected disc involvement',
-      description: 'Initial assessment and pain management',
-      medications: ['Acetaminophen 500mg'],
-    },
-  ];
+  // Treatment plans are loaded from Fasten Health
 
   const doctors = [
     { id: '1', name: 'Dr. Sarah Johnson', qualifications: 'Cardiologist', image: require('@/assets/images/dummy.jpg') },
@@ -179,94 +228,62 @@ export default function DoctorDetailScreen() {
     { id: '4', name: 'Dr. James Wilson', qualifications: 'Dermatologist', image: require('@/assets/images/dummy.jpg') },
   ];
 
-  const progressNotes = [
-    {
-      id: 1,
-      date: 'Nov 18, 2024',
-      time: '2:00 PM',
-      author: 'Dr. Max K.',
-      note: 'Patient shows significant improvement in range of motion. Lower back pain has decreased from 7/10 to 4/10. Patient is responding well to physical therapy exercises. Continue with current treatment plan.',
-    },
-    {
-      id: 2,
-      date: 'Nov 11, 2024',
-      time: '10:30 AM',
-      author: 'Dr. Max K.',
-      note: 'Follow-up appointment completed. Patient reports moderate pain relief with current medication regimen. Muscle tension has improved. Recommended continuation of weekly physical therapy sessions.',
-    },
-    {
-      id: 3,
-      date: 'Nov 4, 2024',
-      time: '3:15 PM',
-      author: 'Dr. Max K.',
-      note: 'Initial assessment completed. Patient presents with chronic lower back pain. Started on Ibuprofen 400mg and muscle relaxant. Physical therapy program initiated with focus on core strengthening exercises.',
-    },
-    {
-      id: 4,
-      date: 'Oct 28, 2024',
-      time: '11:00 AM',
-      author: 'Dr. Max K.',
-      note: 'Patient reports increased mobility compared to previous visit. Pain levels manageable with current treatment. No adverse reactions to medications. Plan to continue monitoring progress.',
-    },
-  ];
+  // Progress notes are loaded from Fasten Health
 
-  const appointments = [
-    {
-      id: 1,
-      date: 'Nov 25, 2024',
-      time: '10:00 AM',
-      type: 'Follow-up',
-      status: 'Confirmed',
-    },
-    {
-      id: 2,
-      date: 'Dec 2, 2024',
-      time: '2:30 PM',
-      type: 'Treatment Session',
-      status: 'Confirmed',
-    },
-    {
-      id: 3,
-      date: 'Dec 9, 2024',
-      time: '11:00 AM',
-      type: 'Progress Review',
-      status: 'Pending',
-    },
-  ];
+  // Appointments are loaded from Fasten Health
 
   const renderTreatmentPlan = () => (
     <ScrollView style={styles.tabContent}>
-      {treatmentPlans.map((plan) => (
-        <Card key={plan.id} style={styles.planCard}>
-          <Card.Content>
-            <View style={styles.planHeader}>
-              <Text style={[styles.planTitle, { fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>{plan.title}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: plan.status === 'Active' ? '#008080' : '#9E9E9E' }]}>
-                <Text style={[styles.statusText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.status}</Text>
+      {isLoadingData ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>Loading treatment plans...</Text>
+        </View>
+      ) : treatmentPlans.length === 0 ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>No treatment plans available</Text>
+        </View>
+      ) : (
+        treatmentPlans.map((plan) => (
+          <Card key={plan.id} style={styles.planCard}>
+            <Card.Content>
+              <View style={styles.planHeader}>
+                <Text style={[styles.planTitle, { fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>{plan.title}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: plan.status === 'Active' ? '#008080' : '#9E9E9E' }]}>
+                  <Text style={[styles.statusText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.status}</Text>
+                </View>
               </View>
-            </View>
-            <Text style={[styles.planDate, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.date}</Text>
-            <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
-              <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Diagnosis:</Text>
-              <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.diagnosis}</Text>
-            </View>
-            <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
-              <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Treatment Recommendations:</Text>
-              <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.description}</Text>
-            </View>
-            <Text style={[styles.medicationsTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Medications:</Text>
-            {plan.medications.map((med, idx) => (
-              <Text key={idx} style={[styles.medication, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>• {med}</Text>
-            ))}
-          </Card.Content>
-        </Card>
-      ))}
+              <Text style={[styles.planDate, {  fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>{plan.date}</Text>
+              <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
+                <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Diagnosis:</Text>
+                <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.diagnosis}</Text>
+              </View>
+              <View style={[styles.diagnosisContainer, { marginTop: getScaledFontSize(12), marginBottom: getScaledFontSize(12) }]}>
+                <Text style={[styles.diagnosisTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Treatment Recommendations:</Text>
+                <Text style={[styles.diagnosis, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]} numberOfLines={0}>{plan.description}</Text>
+              </View>
+              <Text style={[styles.medicationsTitle, { fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Medications:</Text>
+              {plan.medications.map((med, idx) => (
+                <Text key={idx} style={[styles.medication, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>• {med}</Text>
+              ))}
+            </Card.Content>
+          </Card>
+        ))
+      )}
     </ScrollView>
   );
 
   const renderProgressNotes = () => (
     <ScrollView style={styles.tabContent}>
-      {progressNotes.map((note) => (
+      {isLoadingData ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>Loading progress notes...</Text>
+        </View>
+      ) : progressNotes.length === 0 ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>No progress notes available</Text>
+        </View>
+      ) : (
+        progressNotes.map((note) => (
         <Card key={note.id} style={styles.progressNoteCard}>
           <Card.Content>
             <View style={styles.progressNoteHeader}>
@@ -279,7 +296,8 @@ export default function DoctorDetailScreen() {
             <Text style={[styles.progressNoteText, { fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>{note.note}</Text>
           </Card.Content>
         </Card>
-      ))}
+        ))
+      )}
     </ScrollView>
   );
 
@@ -303,7 +321,16 @@ export default function DoctorDetailScreen() {
 
   const renderAppointments = () => (
     <ScrollView style={styles.tabContent}>
-      {appointments.map((appointment) => (
+      {isLoadingData ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>Loading appointments...</Text>
+        </View>
+      ) : appointments.length === 0 ? (
+        <View style={{ padding: 20, alignItems: 'center' }}>
+          <Text style={[{ color: colors.text, fontSize: getScaledFontSize(14) }]}>No appointments available</Text>
+        </View>
+      ) : (
+        appointments.map((appointment) => (
         <Card key={appointment.id} style={styles.appointmentCard}>
           <Card.Content>
             <View style={styles.appointmentHeader}>
@@ -320,7 +347,8 @@ export default function DoctorDetailScreen() {
             </View>
           </Card.Content>
         </Card>
-      ))}
+        ))
+      )}
     </ScrollView>
   );
 
@@ -328,10 +356,14 @@ export default function DoctorDetailScreen() {
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Doctor Header */}
       <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <Avatar.Image source={doctorImage} size={getScaledFontSize(120)} style={styles.doctorAvatar} />
+        <InitialsAvatar name={doctorName} size={getScaledFontSize(120)} style={styles.doctorAvatar} />
         <Text style={[styles.doctorName, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>{doctorName}</Text>
-        <Text style={[styles.qualifications, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>MD, Physical Medicine & Rehabilitation</Text>
-        <Text style={[styles.specialty, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>Specialist in Pain Management</Text>
+        <Text style={[styles.qualifications, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>{doctorQualifications}</Text>
+        {doctorSpecialty && doctorSpecialty !== 'General' && (
+          <Text style={[styles.specialty, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+            Specialist in {doctorSpecialty}
+          </Text>
+        )}
         
         {/* Communication Options */}
         <View style={styles.communicationContainer}>
