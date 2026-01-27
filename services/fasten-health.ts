@@ -269,23 +269,33 @@ type FHIRResource =
   | FHIREncounter
   | FHIRMedicationStatement;
 
+import { USE_MOCK_DATA, getFastenHealthDataName } from './fasten-health-config';
+import { categorizeProvider } from './provider-categorization';
+
 /**
  * Loads and parses the Fasten Health JSON bundle file
  * The file is now a JSON array of FHIR resources
+ * Supports both original and mock data
  */
 export async function loadFastenHealthData(): Promise<FHIRResource[]> {
   try {
     // Import the JSON file as a module
     // This works in React Native/Expo when the file is a proper JSON array
-    const fastenData = require('../data/fasten-health-data.json');
+    const dataFile = USE_MOCK_DATA 
+      ? require('../data/mock-fasten-health-data.json')
+      : require('../data/fasten-health-data-2.json');
+    
+    const fastenData = dataFile;
     
     // Ensure it's an array
     if (Array.isArray(fastenData)) {
+      console.log(`✅ Loaded ${fastenData.length} FHIR resources from ${getFastenHealthDataName()} data`);
       return fastenData as FHIRResource[];
     }
     
     // If it's a single object, wrap it in an array
     if (fastenData && typeof fastenData === 'object') {
+      console.log(`✅ Loaded 1 FHIR resource from ${getFastenHealthDataName()} data`);
       return [fastenData as FHIRResource];
     }
     
@@ -293,6 +303,18 @@ export async function loadFastenHealthData(): Promise<FHIRResource[]> {
     return [];
   } catch (error) {
     console.error('Error loading Fasten Health data:', error);
+    // Fallback to original data if mock data fails
+    if (USE_MOCK_DATA) {
+      console.log('Falling back to original data...');
+      try {
+        const originalData = require('../data/fasten-health-data-2.json');
+        if (Array.isArray(originalData)) {
+          return originalData as FHIRResource[];
+        }
+      } catch (fallbackError) {
+        console.error('Error loading fallback data:', fallbackError);
+      }
+    }
     return [];
   }
 }
@@ -822,6 +844,10 @@ export interface Provider {
   photoUrl?: string; // URL to profile photo if available
   phone?: string;
   email?: string;
+  category?: string; // Main category (Medical, Mental Health, Family, etc.)
+  subCategory?: string; // Primary subcategory for Medical providers (PCP, All Specialists, etc.) - for backward compatibility
+  subCategories?: string[]; // All applicable subcategories (allows multiple)
+  lastVisited?: string; // ISO date string of the most recent encounter/appointment with this provider
 }
 
 /**
@@ -876,8 +902,13 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
   
   // Count engagements (diagnostic reports/encounters) per practitioner
   const practitionerEngagementCount: Map<string, number> = new Map();
+  // Track last visited date per practitioner
+  const practitionerLastVisited: Map<string, Date> = new Map();
   
   diagnosticReports.forEach(report => {
+    const reportDate = report.effectiveDateTime || report.issued;
+    const reportDateObj = reportDate ? new Date(reportDate) : null;
+    
     // Count performers that are practitioners (not organizations)
     if (report.performer && report.performer.length > 0) {
       report.performer.forEach(performer => {
@@ -887,6 +918,12 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
           if (practitionerId) {
             const currentCount = practitionerEngagementCount.get(practitionerId) || 0;
             practitionerEngagementCount.set(practitionerId, currentCount + 1);
+            
+            // Update last visited date if this report is more recent
+            if (reportDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                reportDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, reportDateObj);
+            }
           }
         }
       });
@@ -900,6 +937,12 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
           if (practitionerId) {
             const currentCount = practitionerEngagementCount.get(practitionerId) || 0;
             practitionerEngagementCount.set(practitionerId, currentCount + 1);
+            
+            // Update last visited date if this report is more recent
+            if (reportDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                reportDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, reportDateObj);
+            }
           }
         }
       });
@@ -908,6 +951,10 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
   
   // Also count encounters that reference practitioners
   encounters.forEach(encounter => {
+    // Get encounter date from period or use current date as fallback
+    const encounterDate = encounter.period?.start || encounter.period?.end;
+    const encounterDateObj = encounterDate ? new Date(encounterDate) : null;
+    
     // Check if encounter has participant references to practitioners
     if ((encounter as any).participant) {
       (encounter as any).participant.forEach((participant: any) => {
@@ -916,6 +963,12 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
           if (practitionerId) {
             const currentCount = practitionerEngagementCount.get(practitionerId) || 0;
             practitionerEngagementCount.set(practitionerId, currentCount + 1);
+            
+            // Update last visited date if this encounter is more recent
+            if (encounterDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                encounterDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, encounterDateObj);
+            }
           }
         }
       });
@@ -960,6 +1013,14 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
     const email = practitioner.telecom?.find(t => t.system === 'email')?.value || '';
     
     const engagementCount = practitionerEngagementCount.get(practitioner.id) || 0;
+    const lastVisitedDate = practitionerLastVisited.get(practitioner.id);
+    
+    // Categorize provider
+    const categorization = categorizeProvider({
+      qualifications,
+      specialty,
+      name: fullName,
+    });
     
     return {
       id: practitioner.id,
@@ -968,12 +1029,28 @@ export async function getFastenPractitioners(): Promise<Provider[]> {
       specialty: specialty || 'General',
       phone,
       email,
+      category: categorization.category,
+      subCategory: categorization.subCategory, // Primary subcategory for backward compatibility
+      subCategories: categorization.subCategories, // All applicable subcategories
       engagementCount, // Add engagement count for sorting
+      lastVisited: lastVisitedDate ? lastVisitedDate.toISOString() : undefined,
     };
   });
   
-  // Sort by engagement count in descending order (most engaged first)
+  // Sort by last visited date in descending order (most recently visited first), then by engagement count
   return providersWithEngagement.sort((a, b) => {
+    const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+    const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+    
+    // If both have dates, sort by date descending
+    if (dateA > 0 && dateB > 0) {
+      return dateB - dateA; // Descending order (most recent first)
+    }
+    // If only one has a date, prioritize it
+    if (dateA > 0 && dateB === 0) return -1;
+    if (dateB > 0 && dateA === 0) return 1;
+    
+    // If neither has a date, fall back to engagement count
     const countA = (a as any).engagementCount || 0;
     const countB = (b as any).engagementCount || 0;
     return countB - countA; // Descending order
@@ -1029,6 +1106,13 @@ export async function getFastenPractitionerById(practitionerId: string): Promise
   const phone = practitioner.telecom?.find(t => t.system === 'phone')?.value || '';
   const email = practitioner.telecom?.find(t => t.system === 'email')?.value || '';
   
+  // Categorize provider
+  const categorization = categorizeProvider({
+    qualifications,
+    specialty,
+    name: fullName,
+  });
+  
   return {
     id: practitioner.id,
     name: fullName,
@@ -1036,6 +1120,9 @@ export async function getFastenPractitionerById(practitionerId: string): Promise
     specialty: specialty || 'General',
     phone,
     email,
+    category: categorization.category,
+    subCategory: categorization.subCategory, // Primary subcategory for backward compatibility
+    subCategories: categorization.subCategories, // All applicable subcategories
   };
 }
 
@@ -1084,10 +1171,27 @@ export async function getFastenPractitionersByDepartment(): Promise<Array<{
   const departments: Array<{ id: string; name: string; doctors: Provider[] }> = [];
   
   categoryMap.forEach((doctors, category) => {
+    // Sort doctors within each department by lastVisited in descending order
+    const sortedDoctors = [...doctors].sort((a, b) => {
+      const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+      const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+      
+      // If both have dates, sort by date descending
+      if (dateA > 0 && dateB > 0) {
+        return dateB - dateA; // Descending order (most recent first)
+      }
+      // If only one has a date, prioritize it
+      if (dateA > 0 && dateB === 0) return -1;
+      if (dateB > 0 && dateA === 0) return 1;
+      
+      // If neither has a date, maintain original order
+      return 0;
+    });
+    
     departments.push({
       id: category.toLowerCase().replace(/\s+/g, '-'),
       name: category,
-      doctors: doctors, // Show all providers, no limit
+      doctors: sortedDoctors, // Show all providers, sorted by lastVisited
     });
   });
   

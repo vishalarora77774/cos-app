@@ -1,10 +1,12 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
+import { processFastenHealthDataFromFile } from '@/services/fasten-health-processor';
+import { USE_MOCK_DATA, getFastenHealthDataName } from '@/services/fasten-health-config';
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
-import React, { useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ConnectedHospital {
@@ -12,6 +14,11 @@ interface ConnectedHospital {
   name: string;
   provider: string;
   connectedDate: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  phone?: string;
+  email?: string;
 }
 
 interface AppWrapperProps {
@@ -23,22 +30,6 @@ interface AppWrapperProps {
   showBellIcon?: boolean;
   showHamburgerIcon?: boolean;
 }
-
-// Mock data for connected hospitals - replace with actual data source later
-const mockConnectedHospitals: ConnectedHospital[] = [
-  {
-    id: '1',
-    name: 'Mayo Clinic',
-    provider: 'EPIC',
-    connectedDate: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Cleveland Clinic',
-    provider: 'Cerner',
-    connectedDate: '2024-02-20',
-  },
-];
 
 export function AppWrapper({ 
   children, 
@@ -53,7 +44,82 @@ export function AppWrapper({
   const pathname = usePathname();
   const [isAccessibilityModalVisible, setIsAccessibilityModalVisible] = useState(false);
   const [isDrawerMenuVisible, setIsDrawerMenuVisible] = useState(false);
-  const [connectedHospitals] = useState<ConnectedHospital[]>(mockConnectedHospitals);
+  const [connectedHospitals, setConnectedHospitals] = useState<ConnectedHospital[]>([]);
+  const [isLoadingClinics, setIsLoadingClinics] = useState(false);
+
+  // Load clinics from FHIR data
+  const loadClinics = async () => {
+    setIsLoadingClinics(true);
+    try {
+      const dataSourceName = getFastenHealthDataName();
+      console.log(`🔄 Loading clinics from ${dataSourceName} data (USE_MOCK_DATA: ${USE_MOCK_DATA})`);
+      
+      const processedData = await processFastenHealthDataFromFile();
+      
+      // Transform ProcessedClinic to ConnectedHospital format
+      const hospitals: ConnectedHospital[] = processedData.clinics.map((clinic, index) => {
+        // Generate a connection date (simulate connection dates over the past year)
+        const connectionDate = new Date();
+        connectionDate.setMonth(connectionDate.getMonth() - (index * 2)); // Stagger connection dates
+        
+        // Determine provider based on clinic name or use default
+        const providerNames = ['EPIC', 'Cerner', 'Allscripts', 'athenahealth', 'NextGen'];
+        const provider = providerNames[index % providerNames.length];
+        
+        // Format address
+        const addressParts = [];
+        if (clinic.address?.line && clinic.address.line.length > 0) {
+          addressParts.push(clinic.address.line[0]);
+        }
+        if (clinic.address?.city) {
+          addressParts.push(clinic.address.city);
+        }
+        if (clinic.address?.state) {
+          addressParts.push(clinic.address.state);
+        }
+        if (clinic.address?.zip) {
+          addressParts.push(clinic.address.zip);
+        }
+        const fullAddress = addressParts.join(', ');
+        
+        return {
+          id: clinic.id,
+          name: clinic.name,
+          provider: provider,
+          connectedDate: connectionDate.toISOString().split('T')[0],
+          address: fullAddress || undefined,
+          city: clinic.address?.city,
+          state: clinic.address?.state,
+          phone: clinic.phone,
+          email: clinic.email,
+        };
+      });
+      
+      setConnectedHospitals(hospitals);
+      console.log(`✅ Loaded ${hospitals.length} connected clinics from ${dataSourceName} data`);
+      if (hospitals.length > 0) {
+        console.log(`📋 Clinic names: ${hospitals.map(h => h.name).join(', ')}`);
+      }
+    } catch (error) {
+      console.error('Error loading clinics:', error);
+      // Keep empty array on error
+      setConnectedHospitals([]);
+    } finally {
+      setIsLoadingClinics(false);
+    }
+  };
+
+  // Load clinics on mount
+  useEffect(() => {
+    loadClinics();
+  }, []);
+
+  // Reload clinics when drawer opens to ensure fresh data
+  useEffect(() => {
+    if (isDrawerMenuVisible) {
+      loadClinics();
+    }
+  }, [isDrawerMenuVisible]);
 
   const handleTabPress = (route: string) => {
     router.push(`/(tabs)/${route}` as any);
@@ -176,18 +242,29 @@ export function AppWrapper({
               <View style={[styles.divider, { backgroundColor: colors.text + '20' }]} />
             )}
 
-            {/* Connected Hospitals List */}
-            {connectedHospitals.length > 0 && (
+            {/* Loading State */}
+            {isLoadingClinics && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.tint} />
+                <Text style={[styles.loadingText, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
+                  Loading clinics...
+                </Text>
+              </View>
+            )}
+
+            {/* Connected Clinics List */}
+            {!isLoadingClinics && connectedHospitals.length > 0 && (
               <View style={styles.connectedHospitalsSection}>
                 <Text style={[styles.sectionTitle, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
-                  Connected Hospitals
+                  Connected Clinics ({connectedHospitals.length})
                 </Text>
                 {connectedHospitals.map((hospital) => (
                   <TouchableOpacity 
                     key={hospital.id}
                     style={[styles.hospitalItem, { borderBottomColor: colors.text + '10' }]}
                     onPress={() => {
-                      // TODO: Handle hospital selection/view details
+                      // TODO: Handle clinic selection/view details
+                      // Could navigate to a clinic detail screen showing all data from that clinic
                       closeDrawerMenu();
                     }}
                   >
@@ -196,11 +273,27 @@ export function AppWrapper({
                         <Text style={[styles.hospitalName, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
                           {hospital.name}
                         </Text>
-                        <Text style={[styles.hospitalProvider, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
-                          {hospital.provider}
-                        </Text>
+                        <View style={styles.hospitalDetails}>
+                          <Text style={[styles.hospitalProvider, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
+                            {hospital.provider}
+                          </Text>
+                          {hospital.address && (
+                            <Text style={[styles.hospitalAddress, { color: colors.text + '70', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                              {hospital.address}
+                            </Text>
+                          )}
+                          {hospital.phone && (
+                            <Text style={[styles.hospitalPhone, { color: colors.text + '70', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
+                              📞 {hospital.phone}
+                            </Text>
+                          )}
+                        </View>
                         <Text style={[styles.hospitalDate, { color: colors.text + '60', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
-                          Connected on {new Date(hospital.connectedDate).toLocaleDateString()}
+                          Connected on {new Date(hospital.connectedDate).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                          })}
                         </Text>
                       </View>
                       <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
@@ -210,10 +303,14 @@ export function AppWrapper({
               </View>
             )}
 
-            {connectedHospitals.length === 0 && (
+            {!isLoadingClinics && connectedHospitals.length === 0 && (
               <View style={styles.emptyState}>
-                <Text style={[styles.emptyStateText, { color: colors.text + '60', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
-                  No connected hospitals yet
+                <IconSymbol name="building.2" size={getScaledFontSize(48)} color={colors.text + '40'} />
+                <Text style={[styles.emptyStateText, { color: colors.text + '60', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, marginTop: 16 }]}>
+                  No connected clinics yet
+                </Text>
+                <Text style={[styles.emptyStateSubtext, { color: colors.text + '50', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any, marginTop: 8 }]}>
+                  Connect your first EHR to get started
                 </Text>
               </View>
             )}
@@ -411,11 +508,6 @@ const styles = StyleSheet.create({
   accessibilitySection: {
     marginTop: 24,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
   accessibilityOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,5 +649,30 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 14,
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  loadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+  },
+  hospitalDetails: {
+    marginTop: 4,
+    gap: 2,
+  },
+  hospitalAddress: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  hospitalPhone: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

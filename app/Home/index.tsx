@@ -1,5 +1,6 @@
 import { AppWrapper } from '@/components/app-wrapper';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { FilterMenu } from '@/components/ui/filter-menu';
 import { Colors } from '@/constants/theme';
 import { SUPPORT_CATEGORIES, getSubCategoriesByCategoryId, getCategoryById, getSubCategoryById, matchProviderToSubCategory, type Category, type SubCategory } from '@/constants/categories';
 import { useAccessibility } from '@/stores/accessibility-store';
@@ -8,7 +9,7 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Button, Card, List } from 'react-native-paper';
-import { getFastenPractitioners, getFastenPractitionersByDepartment, Provider as FastenProvider, getFastenPatient } from '@/services/fasten-health';
+import { getFastenPractitioners, getFastenPractitionersByDepartment, Provider as FastenProvider, getFastenPatient, transformFastenHealthData, Appointment as FastenAppointment } from '@/services/fasten-health';
 import { InitialsAvatar } from '@/utils/avatar-utils';
 
 // Helper function to detect if device is a tablet
@@ -617,6 +618,40 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<string | undefined>(undefined);
   const [providersBySubCategory, setProvidersBySubCategory] = useState<Map<string, FastenProvider[]>>(new Map());
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
+  const [lastVisitedFilter, setLastVisitedFilter] = useState<string | null>(null);
+
+  const lastVisitedFilters = [
+    { id: '3m', label: 'Last 3 months', months: 3 },
+    { id: '6m', label: 'Last 6 months', months: 6 },
+    { id: '1y', label: 'Last 1 year', years: 1 },
+    { id: '2y', label: 'Last 2 years', years: 2 },
+    { id: '5y', label: 'Last 5 years', years: 5 },
+  ];
+
+  const getCutoffDate = (filterId: string | null) => {
+    if (!filterId) return null;
+    const filter = lastVisitedFilters.find(item => item.id === filterId);
+    if (!filter) return null;
+    const now = new Date();
+    const cutoff = new Date(now);
+    if (filter.months) {
+      cutoff.setMonth(now.getMonth() - filter.months);
+    } else if (filter.years) {
+      cutoff.setFullYear(now.getFullYear() - filter.years);
+    }
+    return cutoff;
+  };
+
+  const filterProvidersByLastVisited = (providers: FastenProvider[]) => {
+    if (!lastVisitedFilter) return providers;
+    const cutoff = getCutoffDate(lastVisitedFilter);
+    if (!cutoff) return providers;
+    return providers.filter(provider => {
+      if (!provider.lastVisited) return false;
+      const visitedDate = new Date(provider.lastVisited);
+      return visitedDate >= cutoff;
+    });
+  };
 
   // Load and categorize providers
   React.useEffect(() => {
@@ -626,21 +661,44 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
         const providers = await getFastenPractitioners();
         const categorizedProviders = new Map<string, FastenProvider[]>();
         
-        // Categorize each provider
+        // Categorize each provider (can belong to multiple subcategories)
         providers.forEach(provider => {
-          const match = matchProviderToSubCategory(
+          const matches = matchProviderToSubCategory(
             provider.name,
             provider.specialty,
             provider.qualifications
           );
           
-          if (match) {
-            const key = `${match.categoryId}-${match.subCategoryId}`;
-            if (!categorizedProviders.has(key)) {
-              categorizedProviders.set(key, []);
-            }
-            categorizedProviders.get(key)!.push(provider);
+          if (matches && matches.length > 0) {
+            // Add provider to ALL applicable subcategories
+            matches.forEach(match => {
+              const key = `${match.categoryId}-${match.subCategoryId}`;
+              if (!categorizedProviders.has(key)) {
+                categorizedProviders.set(key, []);
+              }
+              categorizedProviders.get(key)!.push(provider);
+            });
           }
+        });
+        
+        // Sort providers in each subcategory by lastVisited in descending order
+        categorizedProviders.forEach((providerList, key) => {
+          const sorted = [...providerList].sort((a, b) => {
+            const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+            const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+            
+            // If both have dates, sort by date descending
+            if (dateA > 0 && dateB > 0) {
+              return dateB - dateA; // Descending order (most recent first)
+            }
+            // If only one has a date, prioritize it
+            if (dateA > 0 && dateB === 0) return -1;
+            if (dateB > 0 && dateA === 0) return 1;
+            
+            // If neither has a date, maintain original order
+            return 0;
+          });
+          categorizedProviders.set(key, sorted);
         });
         
         setProvidersBySubCategory(categorizedProviders);
@@ -679,7 +737,25 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
   const getCurrentProviders = (): FastenProvider[] => {
     if (!selectedCategoryId || !selectedSubCategoryId) return [];
     const key = `${selectedCategoryId}-${selectedSubCategoryId}`;
-    return providersBySubCategory.get(key) || [];
+    const providers = providersBySubCategory.get(key) || [];
+    
+    // Sort by lastVisited in descending order (most recently visited first)
+    const sortedProviders = [...providers].sort((a, b) => {
+      const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+      const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+      
+      // If both have dates, sort by date descending
+      if (dateA > 0 && dateB > 0) {
+        return dateB - dateA; // Descending order (most recent first)
+      }
+      // If only one has a date, prioritize it
+      if (dateA > 0 && dateB === 0) return -1;
+      if (dateB > 0 && dateA === 0) return 1;
+      
+      // If neither has a date, maintain original order
+      return 0;
+    });
+    return filterProvidersByLastVisited(sortedProviders);
   };
 
   const renderCategories = () => (
@@ -816,10 +892,28 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
           ]}>
             {category.name}
           </Text>
+          <View style={{ width: getScaledFontSize(24), alignItems: 'center', justifyContent: 'center' }}>
+            <FilterMenu
+              options={lastVisitedFilters}
+              selectedId={lastVisitedFilter}
+              onSelect={setLastVisitedFilter}
+              onClear={() => setLastVisitedFilter(null)}
+              color={colors.text}
+              menuBackgroundColor={colors.background}
+              menuTextColor={colors.text}
+              menuHighlightColor={colors.tint + '20'}
+              fontSize={getScaledFontSize(14)}
+              fontWeight={getScaledFontWeight(500) as any}
+              iconSize={getScaledFontSize(20)}
+              accessibilityLabel="Filter providers by last visited"
+            />
+          </View>
         </View>
         {category.subCategories.map((subCategory) => {
           const key = `${category.id}-${subCategory.id}`;
-          const providerCount = providersBySubCategory.get(key)?.length || 0;
+          const providerCount = filterProvidersByLastVisited(
+            providersBySubCategory.get(key) || []
+          ).length;
           
           // Don't render sub-categories with no providers
           if (providerCount === 0) {
@@ -1040,13 +1134,29 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
           const departments = await getFastenPractitionersByDepartment();
           const department = departments.find(d => d.id === departmentId);
           if (department) {
-            setFastenProviders(department.doctors);
-            console.log(`Loaded ${department.doctors.length} providers from department ${department.name}`);
+            // Sort by lastVisited in descending order (most recently visited first)
+            const sortedDoctors = [...department.doctors].sort((a, b) => {
+              const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+              const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+              
+              // If both have dates, sort by date descending
+              if (dateA > 0 && dateB > 0) {
+                return dateB - dateA; // Descending order (most recent first)
+              }
+              // If only one has a date, prioritize it
+              if (dateA > 0 && dateB === 0) return -1;
+              if (dateB > 0 && dateA === 0) return 1;
+              
+              // If neither has a date, maintain original order
+              return 0;
+            });
+            setFastenProviders(sortedDoctors);
+            console.log(`Loaded ${sortedDoctors.length} providers from department ${department.name}`);
           } else {
             setFastenProviders([]);
           }
         } else {
-          // Load all providers
+          // Load all providers (already sorted by lastVisited in getFastenPractitioners)
           const providers = await getFastenPractitioners();
           setFastenProviders(providers);
           console.log(`Loaded ${providers.length} providers from Fasten Health`);
@@ -1065,7 +1175,24 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
   const allProviders = React.useMemo(() => {
     // Use Fasten Health providers if available, otherwise use default
     if (fastenProviders.length > 0) {
-      return fastenProviders.map(provider => ({
+      // Sort by lastVisited in descending order (most recently visited first)
+      const sortedProviders = [...fastenProviders].sort((a, b) => {
+        const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+        const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+        
+        // If both have dates, sort by date descending
+        if (dateA > 0 && dateB > 0) {
+          return dateB - dateA; // Descending order (most recent first)
+        }
+        // If only one has a date, prioritize it
+        if (dateA > 0 && dateB === 0) return -1;
+        if (dateB > 0 && dateA === 0) return 1;
+        
+        // If neither has a date, maintain original order
+        return 0;
+      });
+      
+      return sortedProviders.map(provider => ({
         id: provider.id,
         name: provider.name,
         qualifications: provider.qualifications || 'Healthcare Provider',
@@ -1199,6 +1326,8 @@ export default function HomeScreen() {
   const [fastenProviders, setFastenProviders] = useState<FastenProvider[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
   const [patientName, setPatientName] = useState('Jenny Wilson');
+  const [upcomingAppointments, setUpcomingAppointments] = useState<FastenAppointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   
   // Helper function to get first name from full name
   const getFirstName = (fullName: string): string => {
@@ -1235,6 +1364,53 @@ export default function HomeScreen() {
     
     loadProviders();
     loadPatient();
+  }, []);
+
+  useEffect(() => {
+    const loadUpcomingAppointments = async () => {
+      setIsLoadingAppointments(true);
+      try {
+        const healthData = await transformFastenHealthData();
+        const appointments = healthData.appointments || [];
+        const now = new Date();
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 15);
+
+        const upcoming = appointments
+          .map(apt => {
+            const dateObj = new Date(apt.date);
+            if (apt.time) {
+              const timeMatch = apt.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+              if (timeMatch) {
+                let hour = parseInt(timeMatch[1], 10);
+                const minute = parseInt(timeMatch[2], 10);
+                const meridiem = timeMatch[3].toUpperCase();
+                if (meridiem === 'PM' && hour !== 12) {
+                  hour += 12;
+                } else if (meridiem === 'AM' && hour === 12) {
+                  hour = 0;
+                }
+                dateObj.setHours(hour, minute, 0, 0);
+              }
+            }
+            return { apt, dateObj };
+          })
+          .filter(({ dateObj }) => dateObj >= start && dateObj <= end)
+          .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
+          .map(({ apt }) => apt);
+
+        setUpcomingAppointments(upcoming);
+      } catch (error) {
+        console.error('Error loading upcoming appointments:', error);
+        setUpcomingAppointments([]);
+      } finally {
+        setIsLoadingAppointments(false);
+      }
+    };
+
+    loadUpcomingAppointments();
   }, []);
   
   // Generate doctors for circle view - use Fasten Health providers if available
@@ -1480,157 +1656,99 @@ export default function HomeScreen() {
           )}
         </View>
         
-        <View style={styles.appointmentsSection}>
-          <Text style={[
-            styles.sectionTitle,
-            {
-              fontSize: getScaledFontSize(18),
-              fontWeight: getScaledFontWeight(600) as any,
-              color: colors.text,
-            }
-          ]}>Upcoming Appointments</Text>
-          <TouchableOpacity onPress={() => router.push('/appointments-modal')} style={[
-            styles.deckContainer,
-            {
-              height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
-            }
-          ]}>
-            {/* First card */}
-            <Card style={[
-              styles.appointmentCard,
-              styles.firstCard,
+        {upcomingAppointments.length > 0 && (
+          <View style={styles.appointmentsSection}>
+            <Text style={[
+              styles.sectionTitle,
               {
-                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+                fontSize: getScaledFontSize(18),
+                fontWeight: getScaledFontWeight(600) as any,
+                color: colors.text,
               }
-            ]}>
-              <View style={[
-                styles.listItemContainer,
+            ]}>Upcoming Appointments</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/appointments-modal')}
+              style={[
+                styles.deckContainer,
                 {
-                  paddingHorizontal: getScaledFontSize(16),
-                  paddingVertical: getScaledFontSize(8),
-                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
+                  height: Math.max(
+                    56,
+                    getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)
+                  ),
                 }
-              ]}>
-                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
-                  <List.Icon icon="calendar-clock" />
-                </View>
-                <View style={[
-                  styles.listItemContent,
-                  {
-                    marginLeft: getScaledFontSize(16),
-                    flexShrink: 1,
-                  }
-                ]}>
-                  <Text style={[
-                    styles.appointmentTitle,
-                    {
-                      fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
-                      marginBottom: getScaledFontSize(2),
-                    }
-                  ]}>Therapy Session</Text>
-                  <Text style={[
-                    styles.appointmentDescription,
-                    {
-                      fontSize: getScaledFontSize(14),
-                      fontWeight: settings.isBoldTextEnabled ? '600' : '400'
-                    }
-                  ]}>Mon, Nov 20 · 10:00 AM</Text>
-                </View>
-              </View>
-            </Card>
+              ]}
+            >
+              {upcomingAppointments.slice(0, 3).map((appointment, index) => {
+                const appointmentDate = new Date(appointment.date);
+                const dateLabel = appointmentDate.toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                });
+                const title = appointment.doctorName
+                  ? `${appointment.type || 'Appointment'} - ${appointment.doctorName}`
+                  : appointment.type || 'Appointment';
+                const iconNames = ['calendar-clock', 'stethoscope', 'tooth'];
+                const cardStyle = [styles.firstCard, styles.secondCard, styles.thirdCard][index] || styles.firstCard;
 
-            {/* Second card (stacked behind) */}
-            <Card style={[
-              styles.appointmentCard,
-              styles.secondCard,
-              {
-                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
-              }
-            ]}>
-              <View style={[
-                styles.listItemContainer,
-                {
-                  paddingHorizontal: getScaledFontSize(16),
-                  paddingVertical: getScaledFontSize(8),
-                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
-                }
-              ]}>
-                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
-                  <List.Icon icon="stethoscope" />
-                </View>
-                <View style={[
-                  styles.listItemContent,
-                  {
-                    marginLeft: getScaledFontSize(16),
-                    flexShrink: 1,
-                  }
-                ]}>
-                  <Text style={[
-                    styles.appointmentTitle,
-                    {
-                      fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
-                      marginBottom: getScaledFontSize(2),
-                    }
-                  ]}>Annual Check-up</Text>
-                  <Text style={[
-                    styles.appointmentDescription,
-                    {
-                      fontSize: getScaledFontSize(14),
-                      fontWeight: settings.isBoldTextEnabled ? '600' : '400'
-                    }
-                  ]}>Wed, Nov 22 · 2:00 PM</Text>
-                </View>
-              </View>
-            </Card>
-
-            {/* Third card (stacked behind) */}
-            <Card style={[
-              styles.appointmentCard,
-              styles.thirdCard,
-              {
-                height: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
-              }
-            ]}>
-              <View style={[
-                styles.listItemContainer,
-                {
-                  paddingHorizontal: getScaledFontSize(16),
-                  paddingVertical: getScaledFontSize(8),
-                  minHeight: Math.max(56, getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)),
-                }
-              ]}>
-                <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
-                  <List.Icon icon="tooth" />
-                </View>
-                <View style={[
-                  styles.listItemContent,
-                  {
-                    marginLeft: getScaledFontSize(16),
-                    flexShrink: 1,
-                  }
-                ]}>
-                  <Text style={[
-                    styles.appointmentTitle,
-                    {
-                      fontSize: getScaledFontSize(16),
-                      fontWeight: settings.isBoldTextEnabled ? '700' : '500',
-                      marginBottom: getScaledFontSize(2),
-                    }
-                  ]}>Dental Cleaning</Text>
-                  <Text style={[
-                    styles.appointmentDescription,
-                    {
-                      fontSize: getScaledFontSize(14),
-                      fontWeight: settings.isBoldTextEnabled ? '600' : '400'
-                    }
-                  ]}>Fri, Nov 24 · 11:30 AM</Text>
-                </View>
-              </View>
-            </Card>
-          </TouchableOpacity>
-        </View>
+                return (
+                  <Card
+                    key={appointment.id}
+                    style={[
+                      styles.appointmentCard,
+                      cardStyle,
+                      {
+                        height: Math.max(
+                          56,
+                          getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)
+                        ),
+                      }
+                    ]}
+                  >
+                    <View style={[
+                      styles.listItemContainer,
+                      {
+                        paddingHorizontal: getScaledFontSize(16),
+                        paddingVertical: getScaledFontSize(8),
+                        minHeight: Math.max(
+                          56,
+                          getScaledFontSize(16) + getScaledFontSize(2) + getScaledFontSize(14) + (getScaledFontSize(8) * 2) + getScaledFontSize(4)
+                        ),
+                      }
+                    ]}>
+                      <View style={{ transform: [{ scale: getScaledFontSize(24) / 24 }] }}>
+                        <List.Icon icon={iconNames[index] || 'calendar'} />
+                      </View>
+                      <View style={[
+                        styles.listItemContent,
+                        {
+                          marginLeft: getScaledFontSize(16),
+                          flexShrink: 1,
+                        }
+                      ]}>
+                        <Text style={[
+                          styles.appointmentTitle,
+                          {
+                            fontSize: getScaledFontSize(16),
+                            fontWeight: settings.isBoldTextEnabled ? '700' : '500',
+                            marginBottom: getScaledFontSize(2),
+                          }
+                        ]}>{title}</Text>
+                        <Text style={[
+                          styles.appointmentDescription,
+                          {
+                            fontSize: getScaledFontSize(14),
+                            fontWeight: settings.isBoldTextEnabled ? '600' : '400'
+                          }
+                        ]}>{`${dateLabel} · ${appointment.time}`}</Text>
+                      </View>
+                    </View>
+                  </Card>
+                );
+              })}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </AppWrapper>
   );

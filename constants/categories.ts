@@ -82,9 +82,14 @@ export const SUPPORT_CATEGORIES: Category[] = [
     id: 'medical',
     name: 'Medical',
     subCategories: [
-      { id: 'doctors', name: 'Doctors', keywords: ['doctor', 'physician', 'md', 'do'] },
-      { id: 'providers', name: 'Providers', keywords: ['provider', 'practitioner', 'healthcare', 'np', 'nurse practitioner'] },
-      { id: 'nurses', name: 'Nurses', keywords: ['nurse', 'rn', 'nursing'] },
+      { id: 'pcp', name: 'PCP', keywords: ['primary care', 'family medicine', 'family practice', 'general practice', 'internal medicine', 'general practitioner', 'gp', 'family physician', 'primary physician', 'md', 'do', 'physician', 'naturopath', 'naturopathic', 'chiropractor', 'chiropractic', 'dc'] },
+      { id: 'all-specialists', name: 'All Specialists', keywords: ['specialist', 'specialty', 'cardiology', 'cardiac', 'neurology', 'neurological', 'dermatology', 'dermatologist', 'endocrinology', 'endocrinologist', 'gastroenterology', 'gastroenterologist', 'hematology', 'hematologist', 'oncology', 'oncologist', 'nephrology', 'nephrologist', 'pulmonology', 'pulmonologist', 'rheumatology', 'rheumatologist', 'urology', 'urologist', 'gynecology', 'gynecologist', 'obstetrics', 'obstetrician', 'pediatrics', 'pediatrician', 'orthopedics', 'orthopedic', 'ortho', 'ophthalmology', 'ophthalmologist', 'otolaryngology', 'ent', 'allergy', 'allergist', 'immunology', 'immunologist', 'infectious disease', 'radiology', 'radiologist', 'pathology', 'pathologist', 'anesthesiology', 'anesthesiologist'] },
+      { id: 'surgical-specialists', name: 'Surgical Specialists', keywords: ['surgeon', 'surgery', 'surgical', 'cardiothoracic', 'neurosurgery', 'orthopedic surgery', 'plastic surgery', 'general surgery', 'vascular surgery', 'urological surgery', 'gynecological surgery', 'otolaryngology', 'ophthalmology'] },
+      { id: 'registered-nurses', name: 'Registered Nurses', keywords: ['registered nurse', 'rn', 'nurse', 'nursing', 'r.n.', 'r.n'] },
+      { id: 'nurse-practitioners', name: 'Nurse Practitioners', keywords: ['nurse practitioner', 'np', 'n.p.', 'n.p', 'aprn', 'apn', 'fnp', 'anp', 'pnp'] },
+      { id: 'physician-assistants', name: 'Physician Assistants', keywords: ['physician assistant', 'pa', 'pa-c', 'pa c', 'physician\'s assistant'] },
+      { id: 'physical-occupational-therapists', name: 'Physical/Occupational Therapists', keywords: ['physical therapist', 'pt', 'occupational therapist', 'ot', 'physical therapy', 'occupational therapy', 'physiotherapy', 'physiotherapist', 'rehabilitation', 'rehab'] },
+      { id: 'others', name: 'Others', keywords: ['healthcare', 'provider', 'practitioner', 'medical'] },
     ],
   },
 ];
@@ -113,90 +118,103 @@ export function getSubCategoryById(categoryId: string, subCategoryId: string): S
 }
 
 /**
- * Match a provider to a sub-category based on keywords
- * Prioritizes qualifications and specialty over name
+ * Match a provider to sub-categories based on keywords
+ * Uses the new categorization system from provider-categorization.ts
+ * Returns all applicable subcategories (a provider can belong to multiple)
+ * 
+ * @returns Array of category-subcategory pairs, or null if no match
  */
 export function matchProviderToSubCategory(
   providerName: string,
   providerSpecialty?: string,
   providerQualifications?: string
-): { categoryId: string; subCategoryId: string } | null {
-  const searchText = `${providerName} ${providerSpecialty || ''} ${providerQualifications || ''}`.toLowerCase();
-  const qualificationsLower = (providerQualifications || '').toLowerCase();
-  const specialtyLower = (providerSpecialty || '').toLowerCase();
-  const nameLower = providerName.toLowerCase();
+): { categoryId: string; subCategoryId: string }[] | null {
+  // Import the categorization function dynamically to avoid circular dependencies
+  const { categorizeProvider } = require('@/services/provider-categorization');
   
-  // Priority matching: Check qualifications first, then specialty, then name
-  // This ensures more accurate categorization
+  const categorization = categorizeProvider({
+    qualifications: providerQualifications,
+    specialty: providerSpecialty,
+    name: providerName,
+  });
   
-  // Check Medical category first with priority on qualifications
-  const medicalCategory = SUPPORT_CATEGORIES.find(cat => cat.id === 'medical');
-  if (medicalCategory) {
-    // Check doctors first (MD, DO are specific)
-    const doctorsSubCat = medicalCategory.subCategories.find(sub => sub.id === 'doctors');
-    if (doctorsSubCat && (
-      qualificationsLower.includes('md') || 
-      qualificationsLower.includes('do') ||
-      nameLower.includes('md') ||
-      nameLower.includes('do') ||
-      nameLower.includes('doctor') ||
-      nameLower.includes('physician')
-    )) {
-      return {
-        categoryId: 'medical',
-        subCategoryId: 'doctors',
-      };
-    }
-    
-    // Check providers (NP, PA, practitioners)
-    const providersSubCat = medicalCategory.subCategories.find(sub => sub.id === 'providers');
-    if (providersSubCat && (
-      qualificationsLower.includes('np') ||
-      qualificationsLower.includes('nurse practitioner') ||
-      qualificationsLower.includes('pa') ||
-      qualificationsLower.includes('physician assistant') ||
-      qualificationsLower.includes('practitioner') ||
-      searchText.includes('nurse practitioner') ||
-      searchText.includes('physician assistant')
-    )) {
-      return {
-        categoryId: 'medical',
-        subCategoryId: 'providers',
-      };
-    }
-    
-    // Check nurses (RN, but not NP)
-    const nursesSubCat = medicalCategory.subCategories.find(sub => sub.id === 'nurses');
-    if (nursesSubCat && (
-      (qualificationsLower.includes('rn') && !qualificationsLower.includes('np')) ||
-      (nameLower.includes('nurse') && !nameLower.includes('practitioner') && !qualificationsLower.includes('np'))
-    )) {
-      return {
-        categoryId: 'medical',
-        subCategoryId: 'nurses',
-      };
-    }
-  }
-  
-  // Check other categories (Mental Health, Family, etc.)
-  for (const category of SUPPORT_CATEGORIES) {
-    // Skip medical as we already checked it
-    if (category.id === 'medical') continue;
-    
-    for (const subCategory of category.subCategories) {
-      if (subCategory.keywords.some(keyword => searchText.includes(keyword.toLowerCase()))) {
-        return {
-          categoryId: category.id,
-          subCategoryId: subCategory.id,
-        };
-      }
-    }
-  }
-  
-  // Default to Medical > Providers if no match found
-  return {
-    categoryId: 'medical',
-    subCategoryId: 'providers',
+  // Map the new category names to the old category IDs
+  const categoryIdMap: Record<string, string> = {
+    'Mental Health': 'mental-health',
+    'Family': 'family',
+    'Social/Leisure': 'social-leisure',
+    'Faith': 'faith',
+    'Services': 'services',
+    'Medical': 'medical',
   };
+  
+  // Map the new subcategory names to the old subcategory IDs
+  const subCategoryIdMap: Record<string, string> = {
+    'Psychiatrist': 'psychiatrist',
+    'Psychologist': 'psychologist',
+    'MFT': 'mft',
+    'LCSW': 'lcsw',
+    'AA': 'aa',
+    'Substance Abuse Counselors': 'substance-abuse',
+    'Spouse': 'spouse',
+    'Children': 'children',
+    'Siblings': 'siblings',
+    'Parents': 'parents',
+    'Cousins': 'cousins',
+    'Nephews': 'nephews',
+    'Niece': 'niece',
+    'Friends': 'friends',
+    'Groups': 'groups',
+    'Exercise': 'exercise',
+    'Yoga': 'yoga',
+    'Music': 'music',
+    'Concerts': 'concerts',
+    'Education': 'education',
+    'Priest': 'priest',
+    'Rabbi': 'rabbi',
+    'Minister': 'minister',
+    'Church': 'church',
+    'Synagogue': 'synagogue',
+    'Meals': 'meals',
+    'Caregivers': 'caregivers',
+    'Aids': 'aids',
+    'Housekeeper': 'housekeeper',
+    'Maintenance': 'maintenance',
+    'Delivery': 'delivery',
+    'Yard': 'yard',
+    'PCP': 'pcp',
+    'All Specialists': 'all-specialists',
+    'Surgical Specialists': 'surgical-specialists',
+    'Registered Nurses': 'registered-nurses',
+    'Nurse Practitioners': 'nurse-practitioners',
+    'Physician Assistants': 'physician-assistants',
+    'Physical/Occupational Therapists': 'physical-occupational-therapists',
+    'Others': 'others',
+  };
+  
+  const categoryId = categoryIdMap[categorization.category] || 'medical';
+  
+  // Get all applicable subcategories
+  const subCategories = categorization.subCategories || 
+    (categorization.subCategory ? [categorization.subCategory] : ['Others']);
+  
+  // Return array of all category-subcategory pairs
+  return subCategories.map(subCategory => ({
+    categoryId,
+    subCategoryId: subCategoryIdMap[subCategory] || 'others',
+  }));
+}
+
+/**
+ * Match a provider to a single primary sub-category (for backward compatibility)
+ * Returns the first/primary subcategory
+ */
+export function matchProviderToPrimarySubCategory(
+  providerName: string,
+  providerSpecialty?: string,
+  providerQualifications?: string
+): { categoryId: string; subCategoryId: string } | null {
+  const matches = matchProviderToSubCategory(providerName, providerSpecialty, providerQualifications);
+  return matches && matches.length > 0 ? matches[0] : null;
 }
 

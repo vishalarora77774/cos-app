@@ -68,6 +68,10 @@ export interface ProcessedProvider {
   phone?: string;
   email?: string;
   engagementCount: number; // Number of encounters/reports with this provider
+  category?: string; // Main category (Medical, Mental Health, Family, etc.)
+  subCategory?: string; // Primary subcategory for Medical providers (PCP, All Specialists, etc.) - for backward compatibility
+  subCategories?: string[]; // All applicable subcategories (allows multiple)
+  lastVisited?: string; // ISO date string of the most recent encounter/appointment with this provider
 }
 
 export interface ProcessedMedicalReport {
@@ -194,6 +198,7 @@ interface FHIRPatient extends FHIRResource {
     postalCode?: string;
     country?: string;
     text?: string;
+    use?: string;
   }>;
   maritalStatus?: {
     text?: string;
@@ -204,6 +209,7 @@ interface FHIRPatient extends FHIRResource {
   contact?: Array<{
     name?: {
       text?: string;
+    use?: string;
       family?: string;
       given?: string[];
     };
@@ -239,6 +245,7 @@ interface FHIRPractitioner extends FHIRResource {
   qualification?: Array<{
     code?: {
       text?: string;
+    use?: string;
       coding?: Array<{
         display?: string;
       }>;
@@ -254,12 +261,14 @@ interface FHIRDiagnosticReport extends FHIRResource {
       display?: string;
     }>;
     text?: string;
+    use?: string;
   }>;
   code?: {
     coding?: Array<{
       display?: string;
     }>;
     text?: string;
+    use?: string;
   };
   subject?: {
     reference?: string;
@@ -290,6 +299,7 @@ interface FHIRDiagnosticReport extends FHIRResource {
   }>;
   conclusionCode?: Array<{
     text?: string;
+    use?: string;
   }>;
 }
 
@@ -301,6 +311,7 @@ interface FHIREncounter extends FHIRResource {
   };
   type?: Array<{
     text?: string;
+    use?: string;
     coding?: Array<{
       display?: string;
     }>;
@@ -328,6 +339,7 @@ interface FHIRMedicationStatement extends FHIRResource {
   status?: string;
   medicationCodeableConcept?: {
     text?: string;
+    use?: string;
     coding?: Array<{
       display?: string;
     }>;
@@ -338,6 +350,7 @@ interface FHIRMedicationStatement extends FHIRResource {
   };
   dosage?: Array<{
     text?: string;
+    use?: string;
     timing?: {
       repeat?: {
         frequency?: number;
@@ -567,7 +580,7 @@ function processPatients(
 
     const email = patient.telecom?.find(t => t.system === 'email')?.value || '';
 
-    const addressObj = patient.address?.find(a => a.use === 'home') || patient.address?.[0];
+    const addressObj = patient.address?.find((a: any) => a.use === 'home') || patient.address?.[0];
     const address = addressObj ? {
       line: addressObj.line?.[0],
       city: addressObj.city,
@@ -630,8 +643,13 @@ function processProviders(
 ): ProcessedProvider[] {
   // Count engagements per practitioner
   const engagementCountMap = new Map<string, number>();
+  // Track last visited date per practitioner
+  const practitionerLastVisited = new Map<string, Date>();
 
   diagnosticReports.forEach(report => {
+    const reportDate = report.effectiveDateTime || report.issued;
+    const reportDateObj = reportDate ? new Date(reportDate) : null;
+    
     if (report.performer && report.performer.length > 0) {
       report.performer.forEach(performer => {
         if (performer.reference && (!performer.type || performer.type === 'Practitioner')) {
@@ -641,6 +659,12 @@ function processProviders(
               practitionerId,
               (engagementCountMap.get(practitionerId) || 0) + 1
             );
+            
+            // Update last visited date if this report is more recent
+            if (reportDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                reportDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, reportDateObj);
+            }
           }
         }
       });
@@ -655,6 +679,12 @@ function processProviders(
               practitionerId,
               (engagementCountMap.get(practitionerId) || 0) + 1
             );
+            
+            // Update last visited date if this report is more recent
+            if (reportDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                reportDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, reportDateObj);
+            }
           }
         }
       });
@@ -662,6 +692,10 @@ function processProviders(
   });
 
   encounters.forEach(encounter => {
+    // Get encounter date from period or use current date as fallback
+    const encounterDate = encounter.period?.start || encounter.period?.end;
+    const encounterDateObj = encounterDate ? new Date(encounterDate) : null;
+    
     if (encounter.participant) {
       encounter.participant.forEach(participant => {
         if (participant.individual?.reference) {
@@ -671,6 +705,12 @@ function processProviders(
               practitionerId,
               (engagementCountMap.get(practitionerId) || 0) + 1
             );
+            
+            // Update last visited date if this encounter is more recent
+            if (encounterDateObj && (!practitionerLastVisited.has(practitionerId) || 
+                encounterDateObj > practitionerLastVisited.get(practitionerId)!)) {
+              practitionerLastVisited.set(practitionerId, encounterDateObj);
+            }
           }
         }
       });
@@ -712,6 +752,14 @@ function processProviders(
 
     const phone = practitioner.telecom?.find(t => t.system === 'phone')?.value || '';
     const email = practitioner.telecom?.find(t => t.system === 'email')?.value || '';
+    const lastVisitedDate = practitionerLastVisited.get(practitioner.id);
+
+    // Categorize provider
+    const categorization = categorizeProvider({
+      qualifications,
+      specialty,
+      name: fullName,
+    });
 
     return {
       id: practitioner.id,
@@ -723,8 +771,27 @@ function processProviders(
       phone: phone || undefined,
       email: email || undefined,
       engagementCount: engagementCountMap.get(practitioner.id) || 0,
+      category: categorization.category,
+      subCategory: categorization.subCategory, // Primary subcategory for backward compatibility
+      subCategories: categorization.subCategories, // All applicable subcategories
+      lastVisited: lastVisitedDate ? lastVisitedDate.toISOString() : undefined,
     };
-  }).sort((a, b) => b.engagementCount - a.engagementCount); // Sort by engagement
+  }).sort((a, b) => {
+    // Sort by last visited date in descending order (most recently visited first), then by engagement count
+    const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
+    const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
+    
+    // If both have dates, sort by date descending
+    if (dateA > 0 && dateB > 0) {
+      return dateB - dateA; // Descending order (most recent first)
+    }
+    // If only one has a date, prioritize it
+    if (dateA > 0 && dateB === 0) return -1;
+    if (dateB > 0 && dateA === 0) return 1;
+    
+    // If neither has a date, fall back to engagement count
+    return b.engagementCount - a.engagementCount;
+  });
 }
 
 /**
@@ -944,7 +1011,7 @@ function processAppointments(
       let status: 'Scheduled' | 'Completed' | 'Cancelled' = 'Completed';
       if (dateObj > new Date()) {
         status = 'Scheduled';
-      } else if (encounter.status === 'cancelled') {
+      } else if (encounter?.status === 'cancelled') {
         status = 'Cancelled';
       }
 
@@ -1089,7 +1156,7 @@ function processEncounters(
       clinicId,
       patientId: patientId || '',
       type: encounter.type?.[0]?.text || encounter.class?.display,
-      status: encounter.status,
+      status: encounter?.status,
       startDate: encounter.period?.start,
       endDate: encounter.period?.end,
       providers: providers.length > 0 ? providers : undefined,
@@ -1101,21 +1168,62 @@ function processEncounters(
 // Utility Functions for API Integration
 // ============================================================================
 
+import { USE_MOCK_DATA, getFastenHealthDataName } from './fasten-health-config';
+import { categorizeProvider } from './provider-categorization';
+
 /**
  * Processes data from a JSON file (for app usage)
  * Can be replaced with API call when moved to backend
+ * Supports both original and mock data
+ * 
+ * Note: filePath parameter is for future API use - in React Native/Expo,
+ * we must use static require() paths, not dynamic ones
  */
 export async function processFastenHealthDataFromFile(
   filePath?: string
 ): Promise<ProcessedHealthData> {
   try {
-    // In app: load from file
+    // In app: load from file using static require paths
     // In API: this would be replaced with database query or API call
-    const fastenData = require('../data/fasten-health-data.json');
+    // Note: React Native/Expo requires static require() paths, not dynamic ones
+    
+    // IMPORTANT: Check USE_MOCK_DATA at runtime to ensure we use current config
+    // This helps ensure we always use the current config value
+    // Note: React Native's require() may still cache files, so a full app restart may be needed
+    const useMockData = USE_MOCK_DATA;
+    
+    let fastenData;
+    const dataSourceName = useMockData ? 'mock' : 'original';
+    
+    console.log(`📂 Loading data from ${dataSourceName} file (USE_MOCK_DATA: ${useMockData}, env: ${process.env.EXPO_PUBLIC_USE_MOCK_DATA})`);
+    
+    if (useMockData) {
+      fastenData = require('../data/mock-fasten-health-data.json');
+      console.log(`📦 Loaded mock data file (${Array.isArray(fastenData) ? fastenData.length : 1} resources)`);
+    } else {
+      fastenData = require('../data/fasten-health-data-2.json');
+      console.log(`📦 Loaded original data file (${Array.isArray(fastenData) ? fastenData.length : 1} resources)`);
+    }
+    
     const rawData = Array.isArray(fastenData) ? fastenData : [fastenData];
+    
+    console.log(`✅ Processing ${rawData.length} FHIR resources from ${dataSourceName} data`);
     return processFastenHealthData(rawData);
   } catch (error) {
     console.error('Error processing Fasten Health data from file:', error);
+    // Fallback to original data if mock data fails
+    if (USE_MOCK_DATA) {
+      console.log('⚠️ Mock data failed, falling back to original data...');
+      try {
+        const originalData = require('../data/fasten-health-data-2.json');
+        const rawData = Array.isArray(originalData) ? originalData : [originalData];
+        console.log(`✅ Loaded ${rawData.length} resources from original data (fallback)`);
+        return processFastenHealthData(rawData);
+      } catch (fallbackError) {
+        console.error('Error loading fallback data:', fallbackError);
+        throw error;
+      }
+    }
     throw error;
   }
 }
@@ -1164,3 +1272,146 @@ export function getClinicData(
   };
 }
 
+/**
+ * Gets providers grouped by category and subcategory
+ * Useful for API endpoints that need to return categorized providers
+ */
+export function getProvidersByCategory(
+  processedData: ProcessedHealthData
+): {
+  [category: string]: {
+    [subCategory: string]: ProcessedProvider[];
+  };
+} {
+  const grouped: {
+    [category: string]: {
+      [subCategory: string]: ProcessedProvider[];
+    };
+  } = {};
+
+  processedData.providers.forEach(provider => {
+    const category = provider.category || 'Medical';
+    const subCategory = provider.subCategory || 'Others';
+
+    if (!grouped[category]) {
+      grouped[category] = {};
+    }
+
+    if (!grouped[category][subCategory]) {
+      grouped[category][subCategory] = [];
+    }
+
+    grouped[category][subCategory].push(provider);
+  });
+
+  return grouped;
+}
+
+/**
+ * Gets providers for a specific category
+ * Useful for API endpoints filtering by category
+ */
+export function getProvidersForCategory(
+  processedData: ProcessedHealthData,
+  category: string
+): ProcessedProvider[] {
+  return processedData.providers.filter(
+    p => (p.category || 'Medical') === category
+  );
+}
+
+/**
+ * Gets providers for a specific medical subcategory
+ * Useful for API endpoints filtering by medical subcategory
+ */
+export function getProvidersForMedicalSubcategory(
+  processedData: ProcessedHealthData,
+  subCategory: string
+): ProcessedProvider[] {
+  return processedData.providers.filter(
+    p => (p.category || 'Medical') === 'Medical' && (p.subCategory || 'Others') === subCategory
+  );
+}
+
+/**
+ * Gets all unique categories from processed providers
+ * Useful for API endpoints that need to list available categories
+ */
+export function getAvailableCategories(
+  processedData: ProcessedHealthData
+): string[] {
+  const categories = new Set<string>();
+  processedData.providers.forEach(provider => {
+    categories.add(provider.category || 'Medical');
+  });
+  return Array.from(categories).sort();
+}
+
+/**
+ * Gets all unique medical subcategories from processed providers
+ * Useful for API endpoints that need to list available medical subcategories
+ */
+export function getAvailableMedicalSubcategories(
+  processedData: ProcessedHealthData
+): string[] {
+  const subCategories = new Set<string>();
+  processedData.providers
+    .filter(p => (p.category || 'Medical') === 'Medical')
+    .forEach(provider => {
+      subCategories.add(provider.subCategory || 'Others');
+    });
+  return Array.from(subCategories).sort();
+}
+
+/**
+ * Gets categorized providers summary for API responses
+ * Returns a structured format suitable for API endpoints
+ */
+export function getCategorizedProvidersSummary(
+  processedData: ProcessedHealthData
+): {
+  categories: Array<{
+    name: string;
+    count: number;
+    subCategories?: Array<{
+      name: string;
+      count: number;
+    }>;
+  }>;
+  totalProviders: number;
+} {
+  const grouped = getProvidersByCategory(processedData);
+  const categories: Array<{
+    name: string;
+    count: number;
+    subCategories?: Array<{
+      name: string;
+      count: number;
+    }>;
+  }> = [];
+
+  Object.keys(grouped).sort().forEach(category => {
+    const subCategories: Array<{ name: string; count: number }> = [];
+    let categoryCount = 0;
+
+    Object.keys(grouped[category]).sort().forEach(subCategory => {
+      const count = grouped[category][subCategory].length;
+      categoryCount += count;
+      subCategories.push({
+        name: subCategory,
+        count,
+      });
+    });
+
+    categories.push({
+      name: category,
+      count: categoryCount,
+      subCategories: category === 'Medical' ? subCategories : undefined,
+    });
+  });
+
+  return {
+    categories,
+    totalProviders: processedData.providers.length,
+  };
+}

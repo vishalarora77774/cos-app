@@ -1,6 +1,6 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, SafeAreaView, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import { Card } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -95,14 +95,6 @@ export default function Reports() {
     { id: 'imaging', label: 'Imaging' },
     { id: 'medical', label: 'Medical Records' },
     { id: 'pathology', label: 'Pathology' },
-  ];
-
-  const providers = [
-    'City Hospital',
-    'Metro Medical Center',
-    'Regional Lab',
-    'Imaging Associates',
-    'Pathology Lab',
   ];
 
   const categories = [
@@ -287,6 +279,17 @@ export default function Reports() {
       fileType: 'PDF',
     },
   ];
+
+  const providers = useMemo(() => {
+    const reportsToUse = fastenReports.length > 0 ? fastenReports : allReports;
+    return Array.from(
+      new Set(
+        reportsToUse
+          .map(report => report.provider)
+          .filter((provider): provider is string => Boolean(provider))
+      )
+    ).sort();
+  }, [fastenReports]);
 
   const categoryMap: { [key: string]: string } = {
     all: 'All Reports',
