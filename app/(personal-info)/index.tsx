@@ -1,16 +1,19 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Button, Card, Icon, TextInput as PaperTextInput } from 'react-native-paper';
+import { getFastenPatient } from '@/services/fasten-health';
+import { InitialsAvatar } from '@/utils/avatar-utils';
 
 export default function PersonalInfoScreen() {
   const { settings, getScaledFontWeight, getScaledFontSize } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const userImg = require('@/assets/images/dummy.jpg');
 
-  const [formData, setFormData] = useState({
+  // Default form data (fallback)
+  const defaultFormData = {
     name: 'Jenny Wilson',
     email: 'jenny.wilson@email.com',
     phone: '+1 234 567 8900',
@@ -20,7 +23,40 @@ export default function PersonalInfoScreen() {
     city: 'New York',
     state: 'NY',
     zipCode: '10001',
-  });
+  };
+
+  const [formData, setFormData] = useState(defaultFormData);
+  const [isLoadingPatient, setIsLoadingPatient] = useState(true);
+
+  // Load patient data from Fasten Health
+  useEffect(() => {
+    const loadPatientData = async () => {
+      setIsLoadingPatient(true);
+      try {
+        const patient = await getFastenPatient();
+        if (patient) {
+          setFormData({
+            name: patient.name || defaultFormData.name,
+            email: patient.email || defaultFormData.email,
+            phone: patient.phone || defaultFormData.phone,
+            dateOfBirth: patient.dateOfBirth || defaultFormData.dateOfBirth,
+            gender: patient.gender || defaultFormData.gender,
+            address: patient.address || defaultFormData.address,
+            city: patient.city || defaultFormData.city,
+            state: patient.state || defaultFormData.state,
+            zipCode: patient.zipCode || defaultFormData.zipCode,
+          });
+          console.log('Loaded patient data from Fasten Health:', patient.name);
+        }
+      } catch (error) {
+        console.error('Error loading patient data:', error);
+      } finally {
+        setIsLoadingPatient(false);
+      }
+    };
+    
+    loadPatientData();
+  }, []);
 
   const handleSave = () => {
     // Handle save logic here
@@ -61,8 +97,8 @@ export default function PersonalInfoScreen() {
         >
           {/* Profile Photo Section */}
           <View style={styles.photoSection}>
-            <Avatar.Image
-              source={userImg}
+            <InitialsAvatar
+              name={formData.name}
               size={getScaledFontSize(120)}
               style={styles.avatar}
             />

@@ -7,6 +7,8 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Platform
 import { Avatar, Card, IconButton, List, Button } from 'react-native-paper';
 import { getTodayHealthMetrics, HealthMetrics } from '@/services/health';
 import { Medication } from '@/services/openai';
+import { getFastenPatient, getFastenMedications } from '@/services/fasten-health';
+import { InitialsAvatar } from '@/utils/avatar-utils';
 
 interface Task {
   id: number;
@@ -22,6 +24,40 @@ export default function TodayScheduleScreen() {
   const { getScaledFontSize, settings, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const userImg = require('@/assets/images/dummy.jpg');
+  
+  const [patientName, setPatientName] = useState('Jenny Wilson');
+  
+  // Load patient data and medications from Fasten Health
+  useEffect(() => {
+    const loadPatientData = async () => {
+      try {
+        const patient = await getFastenPatient();
+        if (patient) {
+          setPatientName(patient.name || 'Jenny Wilson');
+          console.log('Loaded patient data for today schedule:', patient.name);
+        }
+      } catch (error) {
+        console.error('Error loading patient data:', error);
+      }
+    };
+    
+    const loadMedications = async () => {
+      try {
+        const meds = await getFastenMedications();
+        if (meds && meds.length > 0) {
+          setMedications(meds);
+          console.log(`Loaded ${meds.length} medications from Fasten Health`);
+        } else {
+          console.log('No medications found in Fasten Health data');
+        }
+      } catch (error) {
+        console.error('Error loading medications:', error);
+      }
+    };
+    
+    loadPatientData();
+    loadMedications();
+  }, []);
 
   const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({
     steps: 0,
@@ -35,26 +71,7 @@ export default function TodayScheduleScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const appState = useRef(AppState.currentState);
 
-  const [medications, setMedications] = useState<Medication[]>([
-    {
-      name: 'Metformin',
-      dosage: '500mg',
-      frequency: 'Twice daily with meals',
-      purpose: 'Diabetes management',
-    },
-    {
-      name: 'Lisinopril',
-      dosage: '10mg',
-      frequency: 'Once daily in the morning',
-      purpose: 'Blood pressure control',
-    },
-    {
-      name: 'Aspirin',
-      dosage: '81mg',
-      frequency: 'Once daily',
-      purpose: 'Cardiovascular protection',
-    },
-  ]);
+  const [medications, setMedications] = useState<Medication[]>([]);
 
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -263,7 +280,7 @@ export default function TodayScheduleScreen() {
         {/* Profile Summary */}
         <Card style={[styles.profileCard, { backgroundColor: colors.background }]}>
           <View style={styles.profileContent}>
-            <Avatar.Image source={userImg} size={getScaledFontSize(80)} />
+            <InitialsAvatar name={patientName} size={getScaledFontSize(80)} />
             <View style={styles.profileInfo}>
               <Text style={[
                 styles.profileName,
@@ -273,7 +290,7 @@ export default function TodayScheduleScreen() {
                   color: colors.text,
                 }
               ]}>
-                Jenny Wilson
+                {patientName}
               </Text>
               <Text style={[
                 styles.profileRole,

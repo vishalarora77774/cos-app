@@ -1,12 +1,13 @@
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Modal, SafeAreaView, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import { Card } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Checkbox } from 'expo-checkbox';
 import { generateHistorySummaries, HistorySummary, PatientHistoryData, generateReportSummary, ReportSummary } from '@/services/openai';
+import { getFastenDiagnosticReports, Report as FastenReport } from '@/services/fasten-health';
 
 interface Report {
   id: number;
@@ -65,6 +66,28 @@ export default function Reports() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isRefreshingHistory, setIsRefreshingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  
+  // Fasten Health reports state
+  const [fastenReports, setFastenReports] = useState<Report[]>([]);
+  const [isLoadingFastenReports, setIsLoadingFastenReports] = useState(false);
+  
+  // Load Fasten Health reports on mount
+  useEffect(() => {
+    const loadFastenReports = async () => {
+      setIsLoadingFastenReports(true);
+      try {
+        const reports = await getFastenDiagnosticReports();
+        setFastenReports(reports);
+        console.log(`Loaded ${reports.length} reports from Fasten Health`);
+      } catch (error) {
+        console.error('Error loading Fasten Health reports:', error);
+      } finally {
+        setIsLoadingFastenReports(false);
+      }
+    };
+    
+    loadFastenReports();
+  }, []);
 
   const tabs = [
     { id: 'all', label: 'All Reports' },
@@ -72,14 +95,6 @@ export default function Reports() {
     { id: 'imaging', label: 'Imaging' },
     { id: 'medical', label: 'Medical Records' },
     { id: 'pathology', label: 'Pathology' },
-  ];
-
-  const providers = [
-    'City Hospital',
-    'Metro Medical Center',
-    'Regional Lab',
-    'Imaging Associates',
-    'Pathology Lab',
   ];
 
   const categories = [
@@ -265,6 +280,17 @@ export default function Reports() {
     },
   ];
 
+  const providers = useMemo(() => {
+    const reportsToUse = fastenReports.length > 0 ? fastenReports : allReports;
+    return Array.from(
+      new Set(
+        reportsToUse
+          .map(report => report.provider)
+          .filter((provider): provider is string => Boolean(provider))
+      )
+    ).sort();
+  }, [fastenReports]);
+
   const categoryMap: { [key: string]: string } = {
     all: 'All Reports',
     lab: 'Lab Reports',
@@ -339,7 +365,9 @@ export default function Reports() {
   );
 
   const getFilteredReports = () => {
-    let filtered = allReports;
+    // Use Fasten Health reports if available, otherwise fall back to mock data
+    const reportsToUse = fastenReports.length > 0 ? fastenReports : allReports;
+    let filtered = reportsToUse;
 
     // Filter by active tab category
     if (activeTab !== 'all') {

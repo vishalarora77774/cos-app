@@ -1,10 +1,11 @@
 import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { Card } from 'react-native-paper';
+import { transformFastenHealthData, Appointment as FastenAppointment } from '@/services/fasten-health';
 
 interface Appointment {
   id: string;
@@ -19,10 +20,68 @@ export default function AppointmentsScreen() {
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [fastenAppointments, setFastenAppointments] = useState<FastenAppointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
 
-  // Sample appointments with random colors
+  // Load Fasten Health appointments
+  useEffect(() => {
+    const loadAppointments = async () => {
+      setIsLoadingAppointments(true);
+      try {
+        const healthData = await transformFastenHealthData();
+        if (healthData.appointments && healthData.appointments.length > 0) {
+          setFastenAppointments(healthData.appointments);
+          console.log(`Loaded ${healthData.appointments.length} appointments from Fasten Health`);
+        }
+      } catch (error) {
+        console.error('Error loading Fasten Health appointments:', error);
+      } finally {
+        setIsLoadingAppointments(false);
+      }
+    };
+    
+    loadAppointments();
+  }, []);
+
+  // Transform Fasten Health appointments to display format
   const appointments: Appointment[] = useMemo(() => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+    const appointmentColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+    
+    // Use Fasten Health appointments if available
+    if (fastenAppointments.length > 0) {
+      return fastenAppointments.map((apt, index) => {
+        const appointmentDate = new Date(apt.date);
+        // Parse time from apt.time (format: "10:00 AM")
+        const timeMatch = apt.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        let hour = 9;
+        let minute = 0;
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+          if (timeMatch[3].toUpperCase() === 'PM' && hour !== 12) {
+            hour += 12;
+          } else if (timeMatch[3].toUpperCase() === 'AM' && hour === 12) {
+            hour = 0;
+          }
+        }
+        appointmentDate.setHours(hour, minute, 0, 0);
+        
+        // Create title from appointment details
+        const title = apt.doctorName 
+          ? `${apt.type || 'Appointment'} - ${apt.doctorName}`
+          : apt.type || 'Appointment';
+        
+        return {
+          id: apt.id,
+          title,
+          date: appointmentDate,
+          color: appointmentColors[index % appointmentColors.length],
+          time: apt.time || '9:00 AM',
+        };
+      });
+    }
+    
+    // Fallback to sample appointments if no Fasten Health data
     const today = new Date();
     const sampleAppointments: Appointment[] = [];
 
@@ -36,13 +95,13 @@ export default function AppointmentsScreen() {
         id: `appointment-${i}`,
         title: `Appointment ${i + 1}`,
         date: appointmentDate,
-        color: colors[Math.floor(Math.random() * colors.length)],
+        color: appointmentColors[Math.floor(Math.random() * appointmentColors.length)],
         time: `${randomHour}:00`
       });
     }
 
     return sampleAppointments;
-  }, []);
+  }, [fastenAppointments]);
 
   // Create marked dates for calendar with multi-dot marking
   const markedDates = useMemo(() => {
