@@ -5,12 +5,13 @@ import { useAccessibility } from '@/stores/accessibility-store';
 import { router } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Portal, Text } from 'react-native-paper';
+import { Button, Menu, Portal, Text, TextInput as PaperTextInput } from 'react-native-paper';
 import { Tabs, TabScreen, TabsProvider } from 'react-native-paper-tabs';
 import { getFastenPractitioners, Provider } from '@/services/fasten-health';
 import { getAllCategories, getAllMedicalSubcategories, groupProvidersByCategory, getProvidersByCategory, getProvidersByMedicalSubcategory } from '@/services/provider-categorization';
 import { SUPPORT_CATEGORIES, getCategoryById, matchProviderToSubCategory } from '@/constants/categories';
 import { FilterMenu } from '@/components/ui/filter-menu';
+import { MAX_SELECTED_PROVIDERS, useProviderSelection, type SelectedProvider } from '@/stores/provider-selection-store';
 
 
 interface CategoryGroup {
@@ -26,13 +27,32 @@ interface SubCategoryGroup {
   doctors: Provider[];
 }
 
+type ManualMember = {
+  id: string;
+  name: string;
+  relationship?: string;
+  phone?: string;
+  email?: string;
+  categoryId: string;
+  subCategoryId: string;
+};
+
 export default function ModalScreen() {
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  const { selectedProviders, addProvider, removeProvider } = useProviderSelection();
   const [categoryGroups, setCategoryGroups] = React.useState<CategoryGroup[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [selectedCategoryId, setSelectedCategoryId] = React.useState<string | null>(null);
   const [lastVisitedFilter, setLastVisitedFilter] = React.useState<string | null>(null);
+  const [manualMembersBySubCategory, setManualMembersBySubCategory] = React.useState<Record<string, ManualMember[]>>({});
+  const [openManualFormKey, setOpenManualFormKey] = React.useState<string | null>(null);
+  const [manualName, setManualName] = React.useState('');
+  const [manualRelationship, setManualRelationship] = React.useState('');
+  const [manualPhone, setManualPhone] = React.useState('');
+  const [manualEmail, setManualEmail] = React.useState('');
+  const [manualSubCategoryId, setManualSubCategoryId] = React.useState<string | null>(null);
+  const [isSubCategoryMenuVisible, setIsSubCategoryMenuVisible] = React.useState(false);
 
   const lastVisitedFilters = [
     { id: '3m', label: 'Last 3 months', months: 3 },
@@ -56,20 +76,57 @@ export default function ModalScreen() {
     return cutoff;
   };
 
-  const filterProvidersByLastVisited = (providers: Provider[]) => {
+  const filterProvidersByLastVisited = (providers: SelectedProvider[]) => {
     if (!lastVisitedFilter) return providers;
     const cutoff = getCutoffDate(lastVisitedFilter);
     if (!cutoff) return providers;
     return providers.filter(provider => {
+      if (provider.isManual) return true;
+      if (provider.category && provider.category !== 'Medical') return true;
       if (!provider.lastVisited) return false;
       const visitedDate = new Date(provider.lastVisited);
       return visitedDate >= cutoff;
     });
   };
 
+  const getSubCategoryKey = (categoryId: string, subCategoryId: string) =>
+    `${categoryId}-${subCategoryId}`;
+
+  const handleAddManualMember = (categoryId: string, subCategoryId: string) => {
+    const trimmedName = manualName.trim();
+    if (!trimmedName) return;
+    const targetSubCategoryId = manualSubCategoryId || subCategoryId;
+    const key = getSubCategoryKey(categoryId, targetSubCategoryId);
+    const newMember: ManualMember = {
+      id: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: trimmedName,
+      relationship: manualRelationship.trim() || undefined,
+      phone: manualPhone.trim() || undefined,
+      email: manualEmail.trim() || undefined,
+      categoryId,
+      subCategoryId: targetSubCategoryId,
+    };
+    setManualMembersBySubCategory(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), newMember],
+    }));
+    setManualName('');
+    setManualRelationship('');
+    setManualPhone('');
+    setManualEmail('');
+    setManualSubCategoryId(null);
+    setOpenManualFormKey(null);
+  };
+
   const closeModal = () => {
     router.back();
   };
+
+  const selectedProviderIds = React.useMemo(
+    () => new Set(selectedProviders.map(provider => provider.id)),
+    [selectedProviders]
+  );
+  const isCircleFull = selectedProviders.length >= MAX_SELECTED_PROVIDERS;
 
   // Load and categorize providers from Fasten Health
   React.useEffect(() => {
@@ -121,54 +178,23 @@ export default function ModalScreen() {
           }
         });
         
-        // Group by category (category IDs can contain hyphens like "social-leisure")
-        const categoriesByCategoryId = new Map<string, Map<string, Provider[]>>();
-        categorizedProviders.forEach((providerList, key) => {
-          const categoryDef = SUPPORT_CATEGORIES.find(category =>
-            key.startsWith(`${category.id}-`)
-          );
-          if (!categoryDef) return;
-
-          const categoryId = categoryDef.id;
-          const subCategoryId = key.substring(categoryId.length + 1);
-          if (!subCategoryId) return;
-
-          if (!categoriesByCategoryId.has(categoryId)) {
-            categoriesByCategoryId.set(categoryId, new Map());
-          }
-          const subCategoryMap = categoriesByCategoryId.get(categoryId)!;
-          subCategoryMap.set(subCategoryId, providerList);
-        });
-        
-        const categories: CategoryGroup[] = [];
-        
-        // Process each category in the order defined in SUPPORT_CATEGORIES
-        SUPPORT_CATEGORIES.forEach(categoryDef => {
-          const subCategoryMap = categoriesByCategoryId.get(categoryDef.id);
-          if (!subCategoryMap || subCategoryMap.size === 0) return;
-          
-          const subCategories: SubCategoryGroup[] = [];
-          
-          // Use the order from category definition to ensure consistency
-          categoryDef.subCategories.forEach(subCatDef => {
-            const providers = subCategoryMap.get(subCatDef.id) || [];
-            if (providers.length > 0) {
-              subCategories.push({
-                id: subCatDef.id,
-                name: subCatDef.name,
-                doctors: providers,
-              });
-            }
+        const categories: CategoryGroup[] = SUPPORT_CATEGORIES.map(categoryDef => {
+          const subCategories: SubCategoryGroup[] = categoryDef.subCategories.map(subCatDef => {
+            const key = `${categoryDef.id}-${subCatDef.id}`;
+            const providers = categorizedProviders.get(key) || [];
+            return {
+              id: subCatDef.id,
+              name: subCatDef.name,
+              doctors: providers,
+            };
           });
-          
-          if (subCategories.length > 0) {
-            categories.push({
-              id: categoryDef.id,
-              name: categoryDef.name,
-              doctors: [], // Empty when using subcategories
-              subCategories,
-            });
-          }
+
+          return {
+            id: categoryDef.id,
+            name: categoryDef.name,
+            doctors: [],
+            subCategories,
+          };
         });
         
         setCategoryGroups(categories);
@@ -235,6 +261,8 @@ export default function ModalScreen() {
           onChangeIndex={(index) => {
             // Reset selected category when switching tabs
             setSelectedCategoryId(null);
+            setOpenManualFormKey(null);
+            setManualSubCategoryId(null);
           }}
         >
           <Tabs
@@ -258,12 +286,119 @@ export default function ModalScreen() {
             style={{ backgroundColor: colors.background }}
             dark={settings.isDarkTheme}
           >
-            {categoryGroups.map((category) => (
+            {categoryGroups.map((category) => {
+              const isNonMedicalCategory = category.id !== 'medical';
+              const subCategories = category.subCategories || [];
+              const subCategoriesWithData = subCategories.filter(subCategory => {
+                const key = getSubCategoryKey(category.id, subCategory.id);
+                const providers = subCategory.doctors || [];
+                const manualMembers = manualMembersBySubCategory[key] || [];
+                return providers.length + manualMembers.length > 0;
+              });
+              const subCategoriesToShow = isNonMedicalCategory ? subCategoriesWithData : subCategories;
+              const showEmptyNonMedical = isNonMedicalCategory && subCategoriesWithData.length === 0;
+              const emptyFormKey = `category-${category.id}`;
+              const manualSubCategoryLabel = manualSubCategoryId
+                ? subCategories.find(sub => sub.id === manualSubCategoryId)?.name
+                : undefined;
+
+              return (
               <TabScreen
                 key={category.id}
                 label={category.name}
               >
-                {category.subCategories && category.subCategories.length > 0 ? (
+                {showEmptyNonMedical ? (
+                  <ScrollView contentContainerStyle={styles.cardsContainer}>
+                    <View style={styles.addMemberContainer}>
+                      {openManualFormKey === emptyFormKey ? (
+                        <View style={styles.addMemberForm}>
+                          <Menu
+                            visible={isSubCategoryMenuVisible}
+                            onDismiss={() => setIsSubCategoryMenuVisible(false)}
+                            anchor={
+                              <Button
+                                mode="outlined"
+                                onPress={() => setIsSubCategoryMenuVisible(true)}
+                              >
+                                {manualSubCategoryLabel || 'Select sub-category'}
+                              </Button>
+                            }
+                          >
+                            {subCategories.map(sub => (
+                              <Menu.Item
+                                key={sub.id}
+                                title={sub.name}
+                                onPress={() => {
+                                  setManualSubCategoryId(sub.id);
+                                  setIsSubCategoryMenuVisible(false);
+                                }}
+                              />
+                            ))}
+                          </Menu>
+                          <PaperTextInput
+                            label="Full name"
+                            value={manualName}
+                            onChangeText={setManualName}
+                            mode="outlined"
+                            style={styles.addMemberInput}
+                          />
+                          <PaperTextInput
+                            label="Relationship"
+                            value={manualRelationship}
+                            onChangeText={setManualRelationship}
+                            mode="outlined"
+                            style={styles.addMemberInput}
+                          />
+                          <PaperTextInput
+                            label="Phone"
+                            value={manualPhone}
+                            onChangeText={setManualPhone}
+                            mode="outlined"
+                            keyboardType="phone-pad"
+                            style={styles.addMemberInput}
+                          />
+                          <PaperTextInput
+                            label="Email"
+                            value={manualEmail}
+                            onChangeText={setManualEmail}
+                            mode="outlined"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            style={styles.addMemberInput}
+                          />
+                          <View style={styles.addMemberActions}>
+                            <Button
+                              mode="outlined"
+                              onPress={() => {
+                                setOpenManualFormKey(null);
+                                setManualSubCategoryId(null);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              mode="contained"
+                              onPress={() => handleAddManualMember(category.id, manualSubCategoryId || '')}
+                              disabled={!manualName.trim() || !manualSubCategoryId}
+                            >
+                              Add
+                            </Button>
+                          </View>
+                        </View>
+                      ) : (
+                        <Button
+                          mode="outlined"
+                          onPress={() => {
+                            setManualSubCategoryId(null);
+                            setOpenManualFormKey(emptyFormKey);
+                          }}
+                        >
+                          Add member
+                        </Button>
+                      )}
+                    </View>
+                  </ScrollView>
+                ) : category.subCategories && category.subCategories.length > 0 ? (
                   // Category has subcategories: Show nested tabs
                   <TabsProvider defaultIndex={0}>
                     <Tabs
@@ -287,29 +422,174 @@ export default function ModalScreen() {
                       style={{ backgroundColor: colors.background }}
                       dark={settings.isDarkTheme}
                     >
-                      {category.subCategories
-                        .filter(subCategory => subCategory.doctors.length > 0) // Only show tabs for subcategories with providers
-                        .map((subCategory) => (
+                      {subCategoriesToShow.map((subCategory) => {
+                        const subCategoryKey = getSubCategoryKey(category.id, subCategory.id);
+                        const manualMembers = manualMembersBySubCategory[subCategoryKey] || [];
+                        const availableSubCategories = subCategories || [];
+                        const manualProviders: SelectedProvider[] = manualMembers.map(member => ({
+                          id: member.id,
+                          name: member.name,
+                          qualifications: member.relationship || 'Member',
+                          image: undefined,
+                          category: category.name,
+                          subCategory: subCategory.name,
+                          isManual: true,
+                          relationship: member.relationship,
+                        }));
+                        const combinedProviders = filterProvidersByLastVisited([
+                          ...subCategory.doctors,
+                          ...manualProviders,
+                        ]);
+                        const canAddMember = category.id !== 'medical';
+                        const isFormOpen = openManualFormKey === subCategoryKey;
+                        const manualSubCategoryLabel = manualSubCategoryId
+                          ? availableSubCategories.find(sub => sub.id === manualSubCategoryId)?.name
+                          : undefined;
+
+                        return (
                         <TabScreen
                           key={subCategory.id}
                           label={subCategory.name}
                         >
                           <ScrollView contentContainerStyle={styles.cardsContainer}>
-                            {filterProvidersByLastVisited(subCategory.doctors).map((provider) => (
-                              <DoctorCard
-                                key={provider.id}
-                                id={provider.id}
-                                name={provider.name}
-                                qualifications={provider.qualifications || 'Healthcare Provider'}
-                                image={provider.image || undefined}
-                                onPress={() => {
-                                  router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
-                                }}
-                              />
-                            ))}
+                            {canAddMember && (
+                              <View style={styles.addMemberContainer}>
+                                {isFormOpen ? (
+                                  <View style={styles.addMemberForm}>
+                                    <Menu
+                                      visible={isSubCategoryMenuVisible}
+                                      onDismiss={() => setIsSubCategoryMenuVisible(false)}
+                                      anchor={
+                                        <Button
+                                          mode="outlined"
+                                          onPress={() => setIsSubCategoryMenuVisible(true)}
+                                        >
+                                          {manualSubCategoryLabel || subCategory.name || 'Select sub-category'}
+                                        </Button>
+                                      }
+                                    >
+                                      {availableSubCategories.map(sub => (
+                                        <Menu.Item
+                                          key={sub.id}
+                                          title={sub.name}
+                                          onPress={() => {
+                                            setManualSubCategoryId(sub.id);
+                                            setIsSubCategoryMenuVisible(false);
+                                          }}
+                                        />
+                                      ))}
+                                    </Menu>
+                                    <PaperTextInput
+                                      label="Full name"
+                                      value={manualName}
+                                      onChangeText={setManualName}
+                                      mode="outlined"
+                                      style={styles.addMemberInput}
+                                    />
+                                    <PaperTextInput
+                                      label="Relationship"
+                                      value={manualRelationship}
+                                      onChangeText={setManualRelationship}
+                                      mode="outlined"
+                                      style={styles.addMemberInput}
+                                    />
+                                    <PaperTextInput
+                                      label="Phone"
+                                      value={manualPhone}
+                                      onChangeText={setManualPhone}
+                                      mode="outlined"
+                                      keyboardType="phone-pad"
+                                      style={styles.addMemberInput}
+                                    />
+                                    <PaperTextInput
+                                      label="Email"
+                                      value={manualEmail}
+                                      onChangeText={setManualEmail}
+                                      mode="outlined"
+                                      keyboardType="email-address"
+                                      autoCapitalize="none"
+                                      style={styles.addMemberInput}
+                                    />
+                                    <View style={styles.addMemberActions}>
+                                      <Button
+                                        mode="outlined"
+                                        onPress={() => {
+                                          setOpenManualFormKey(null);
+                                          setManualSubCategoryId(null);
+                                        }}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        mode="contained"
+                                        onPress={() => handleAddManualMember(category.id, subCategory.id)}
+                                        disabled={!manualName.trim() || !(manualSubCategoryId || subCategory.id)}
+                                      >
+                                        Add
+                                      </Button>
+                                    </View>
+                                  </View>
+                                ) : (
+                                  <Button
+                                    mode="outlined"
+                                    onPress={() => {
+                                      setManualSubCategoryId(subCategory.id);
+                                      setOpenManualFormKey(subCategoryKey);
+                                    }}
+                                  >
+                                    Add member
+                                  </Button>
+                                )}
+                              </View>
+                            )}
+                            {combinedProviders.length === 0 ? (
+                              <View style={styles.emptyDepartmentContainer}>
+                                <Text style={[
+                                  styles.emptyText,
+                                  {
+                                    color: colors.text,
+                                    fontSize: getScaledFontSize(14),
+                                    fontWeight: getScaledFontWeight(500) as any,
+                                  }
+                                ]}>
+                                  No providers in this sub-category
+                                </Text>
+                              </View>
+                            ) : (
+                              combinedProviders.map((provider) => {
+                                const isSelected = selectedProviderIds.has(provider.id);
+                                const canAdd = !isSelected && !isCircleFull;
+                                const showAction = isSelected || !isCircleFull;
+                                return (
+                                <DoctorCard
+                                  key={provider.id}
+                                  id={provider.id}
+                                  name={provider.name}
+                                  qualifications={provider.isManual
+                                    ? (provider.relationship || provider.qualifications || 'Member')
+                                    : (provider.qualifications || 'Healthcare Provider')}
+                                  image={provider.image || undefined}
+                                  onPress={provider.isManual ? undefined : () => {
+                                    router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                                  }}
+                                  highlighted={isSelected}
+                                  actionIconName={showAction ? (isSelected ? 'minus' : 'plus') : undefined}
+                                  actionDisabled={!canAdd && !isSelected}
+                                  onActionPress={() => {
+                                    if (isSelected) {
+                                      removeProvider(provider.id);
+                                    } else if (canAdd) {
+                                      addProvider(provider);
+                                    }
+                                  }}
+                                />
+                                );
+                              })
+                            )}
                           </ScrollView>
                         </TabScreen>
-                      ))}
+                        );
+                      })}
                     </Tabs>
                   </TabsProvider>
                 ) : (
@@ -322,7 +602,11 @@ export default function ModalScreen() {
                         </Text>
                       </View>
                     ) : (
-                      filterProvidersByLastVisited(category.doctors).map((provider) => (
+                      filterProvidersByLastVisited(category.doctors).map((provider) => {
+                        const isSelected = selectedProviderIds.has(provider.id);
+                        const canAdd = !isSelected && !isCircleFull;
+                        const showAction = isSelected || !isCircleFull;
+                        return (
                         <DoctorCard
                           key={provider.id}
                           id={provider.id}
@@ -332,13 +616,25 @@ export default function ModalScreen() {
                           onPress={() => {
                             router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
                           }}
+                          highlighted={isSelected}
+                          actionIconName={showAction ? (isSelected ? 'minus' : 'plus') : undefined}
+                          actionDisabled={!canAdd && !isSelected}
+                          onActionPress={() => {
+                            if (isSelected) {
+                              removeProvider(provider.id);
+                            } else if (canAdd) {
+                              addProvider(provider);
+                            }
+                          }}
                         />
-                      ))
+                        );
+                      })
                     )}
                   </ScrollView>
                 )}
               </TabScreen>
-            ))}
+              );
+            })}
           </Tabs>
         </TabsProvider>
         )}
@@ -419,6 +715,21 @@ const styles = StyleSheet.create({
   emptyDepartmentContainer: {
     padding: 20,
     alignItems: 'center',
+  },
+  addMemberContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  addMemberForm: {
+    gap: 10,
+  },
+  addMemberInput: {
+    backgroundColor: 'transparent',
+  },
+  addMemberActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   subCategorySection: {
     marginBottom: 24,

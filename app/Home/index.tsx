@@ -4,11 +4,12 @@ import { FilterMenu } from '@/components/ui/filter-menu';
 import { Colors } from '@/constants/theme';
 import { SUPPORT_CATEGORIES, getSubCategoriesByCategoryId, getCategoryById, getSubCategoryById, matchProviderToSubCategory, type Category, type SubCategory } from '@/constants/categories';
 import { useAccessibility } from '@/stores/accessibility-store';
+import { MAX_SELECTED_PROVIDERS, useProviderSelection, type SelectedProvider } from '@/stores/provider-selection-store';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Avatar, Button, Card, List } from 'react-native-paper';
+import { Avatar, Button, Card, List, Menu, TextInput as PaperTextInput } from 'react-native-paper';
 import { getFastenPractitioners, getFastenPractitionersByDepartment, Provider as FastenProvider, getFastenPatient, transformFastenHealthData, Appointment as FastenAppointment } from '@/services/fasten-health';
 import { InitialsAvatar } from '@/utils/avatar-utils';
 
@@ -48,25 +49,31 @@ const formatProviderDisplayName = (fullName: string): string => {
   return `${firstName} ${lastInitial}`.trim();
 };
 
-type DoctorRole = 'provider' | 'care_manager' | 'doctor_on_demand';
+type ManualMember = {
+  id: string;
+  name: string;
+  relationship?: string;
+  phone?: string;
+  email?: string;
+  categoryId: string;
+  subCategoryId: string;
+};
 
-interface Doctor {
-  key: number;
-  role: DoctorRole;
-}
+type OrbitItem = SelectedProvider | { id: string; isPlaceholder: true };
 
 interface CircleViewProps {
-  doctors: Array<Doctor>;
+  providers: SelectedProvider[];
   userImg: any;
   colors: any;
   getScaledFontSize: (size: number) => number;
   getScaledFontWeight: (weight: number) => string | number;
-  fastenProviders?: FastenProvider[];
   patientName?: string;
+  onAddProviderPress: () => void;
+  isCircleComplete: boolean;
 }
 
 // Original Circle View for iPhone/Android (fixed dimensions)
-function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight, fastenProviders = [], patientName = 'Jenny Wilson' }: CircleViewProps) {
+function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', onAddProviderPress, isCircleComplete }: CircleViewProps) {
   // Original fixed values
   const containerWidth = 384;
   const containerHeight = 320;
@@ -75,6 +82,13 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
   const orbitAvatarSize = 48;
   const orbitAvatarContainerSize = 120;
   const linkLineWidth = 92;
+
+  const orbitItems: OrbitItem[] = isCircleComplete
+    ? providers
+    : [
+        ...providers,
+        { id: 'add-provider', isPlaceholder: true },
+      ];
 
   return (
     <View style={[styles.circleContainer, { width: containerWidth, height: containerHeight, alignItems: 'center', justifyContent: 'center' }]}>
@@ -112,23 +126,25 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
           }
         ]}>{patientName}</Text>
       </View>
-      <Button 
-        mode="contained" 
-        buttonColor="#008080"
-        onPress={() => router.push('/modal')} 
-        style={styles.moreDoctorsButton}>
-        More
-      </Button>
-      {doctors.map((u, idx) => {
-        const angle = (idx / doctors.length) * 2 * Math.PI;
+      {isCircleComplete && (
+        <Button 
+          mode="contained" 
+          buttonColor="#008080"
+          onPress={() => router.push('/modal')} 
+          style={styles.moreDoctorsButton}>
+          More
+        </Button>
+      )}
+      {orbitItems.map((item, idx) => {
+        const angle = (idx / orbitItems.length) * 2 * Math.PI;
         const x = Math.cos(angle) * radius;
         const y = Math.sin(angle) * radius;
-        const isCareManager = u.role === 'care_manager';
-        const avatarSize = isCareManager ? orbitAvatarSize * 1.35 : orbitAvatarSize;
-        const containerSize = isCareManager ? orbitAvatarContainerSize * 1.35 : orbitAvatarContainerSize;
+        const avatarSize = orbitAvatarSize;
+        const containerSize = orbitAvatarContainerSize;
         const halfContainerSize = containerSize / 2;
+        const isPlaceholder = 'isPlaceholder' in item;
         return (
-          <React.Fragment key={`doctor-${u.key}`}>
+          <React.Fragment key={item.id}>
             <View
               style={[
                 styles.linkLine,
@@ -154,36 +170,41 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
                 },
               ]}
               onPress={() => {
-                const provider = fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length];
-                if (provider) {
-                  router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
-                } else {
-                  router.push('/(doctor-detail)?name=Dr. Max K.');
+                if (isPlaceholder) {
+                  onAddProviderPress();
+                  return;
+                }
+                if (!item.isManual) {
+                  router.push(`/(doctor-detail)?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
                 }
               }}
             >
-              <InitialsAvatar
-                name={fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length] 
-                  ? fastenProviders[idx % fastenProviders.length].name
-                  : 'Kendrick L.'}
-                size={getScaledFontSize(avatarSize)}
-              />
-              <Text 
-                numberOfLines={2}
-                style={[
-                  styles.orbitAvatarText,
-                  {
-                    fontSize: getScaledFontSize(12),
-                    fontWeight: getScaledFontWeight(500) as any,
-                    color: colors.text,
-                    width: 90,
-                    textAlign: 'center'
-                  }
-                ]}>
-                {fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length] 
-                  ? formatProviderDisplayName(fastenProviders[idx % fastenProviders.length].name)
-                  : 'Kendrick L.'}
-              </Text>
+              {isPlaceholder ? (
+                <View style={[styles.addProviderAvatar, { width: getScaledFontSize(avatarSize), height: getScaledFontSize(avatarSize) }]}>
+                  <IconSymbol name="plus" size={getScaledFontSize(24)} color={colors.tint || '#008080'} />
+                </View>
+              ) : (
+                <>
+                  <InitialsAvatar
+                    name={item.name}
+                    size={getScaledFontSize(avatarSize)}
+                  />
+                  <Text 
+                    numberOfLines={2}
+                    style={[
+                      styles.orbitAvatarText,
+                      {
+                        fontSize: getScaledFontSize(12),
+                        fontWeight: getScaledFontWeight(500) as any,
+                        color: colors.text,
+                        width: 90,
+                        textAlign: 'center'
+                      }
+                    ]}>
+                    {formatProviderDisplayName(item.name)}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </React.Fragment>
         );
@@ -193,7 +214,7 @@ function PhoneCircleView({ doctors, userImg, colors, getScaledFontSize, getScale
 }
 
 // Responsive Circle View for iPad/Tablet
-function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight, fastenProviders = [], patientName = 'Jenny Wilson' }: CircleViewProps) {
+function TabletCircleView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', onAddProviderPress, isCircleComplete }: CircleViewProps) {
   // Get screen dimensions and calculate scale factor
   const screenWidth = Dimensions.get('window').width;
   // Horizontal padding from circleSection (24 on each side = 48 total)
@@ -230,12 +251,18 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
   
   // Calculate minimum radius to prevent overlapping with center avatar
   // Need enough space for center avatar + orbiting avatar + padding
-  const maxContainerSize = Math.max(...doctors.map(d => d.role === 'care_manager' ? avatarContainerSize * 1.35 : avatarContainerSize));
+  const maxContainerSize = avatarContainerSize;
   const minRadiusFromCenter = (centerAvatarSize / 2) + (maxContainerSize / 2) + 80; // 80px padding between center and orbit
   
   // Calculate minimum radius to prevent overlapping between orbiting doctors
   // Each doctor needs space around the circle: we need enough circumference for all doctors
-  const minRadiusForSpacing = (maxContainerSize * doctors.length * 1.5) / (2 * Math.PI);
+  const orbitItems: OrbitItem[] = isCircleComplete
+    ? providers
+    : [
+        ...providers,
+        { id: 'add-provider', isPlaceholder: true },
+      ];
+  const minRadiusForSpacing = (maxContainerSize * orbitItems.length * 1.5) / (2 * Math.PI);
   
   // Scale radius more aggressively for larger screens - increased multiplier for more spacing
   const desiredRadius = baseRadius * scaleFactor * adaptiveMultiplier;
@@ -285,34 +312,36 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
           }
         ]}>{patientName}</Text>
       </View>
-      <Button 
-        labelStyle={{ 
-          fontSize: getScaledFontSize(12), 
-          fontWeight: getScaledFontWeight(500) as any, 
-          lineHeight: getScaledFontSize(16) 
-        }} 
-        mode="contained" 
-        buttonColor="#008080"
-        onPress={() => router.push('/modal')} 
-        style={[
-          styles.moreDoctorsButton,
-          {
-            paddingHorizontal: getScaledFontSize(20),
-            borderRadius: getScaledFontSize(24),
-          }
-        ]}>
-        More
-      </Button>
-      {doctors.map((u, idx) => {
-        const angle = (idx / doctors.length) * 2 * Math.PI;
+      {isCircleComplete && (
+        <Button 
+          labelStyle={{ 
+            fontSize: getScaledFontSize(12), 
+            fontWeight: getScaledFontWeight(500) as any, 
+            lineHeight: getScaledFontSize(16) 
+          }} 
+          mode="contained" 
+          buttonColor="#008080"
+          onPress={() => router.push('/modal')} 
+          style={[
+            styles.moreDoctorsButton,
+            {
+              paddingHorizontal: getScaledFontSize(20),
+              borderRadius: getScaledFontSize(24),
+            }
+          ]}>
+          More
+        </Button>
+      )}
+      {orbitItems.map((item, idx) => {
+        const angle = (idx / orbitItems.length) * 2 * Math.PI;
         const x = Math.cos(angle) * radius;
         const y = Math.sin(angle) * radius;
-        const isCareManager = u.role === 'care_manager';
-        const avatarSize = isCareManager ? orbitAvatarSize * 1.35 : orbitAvatarSize;
-        const containerSize = isCareManager ? orbitAvatarContainerSize * 1.35 : orbitAvatarContainerSize;
+        const avatarSize = orbitAvatarSize;
+        const containerSize = orbitAvatarContainerSize;
         const halfContainerSize = containerSize / 2;
+        const isPlaceholder = 'isPlaceholder' in item;
         return (
-          <React.Fragment key={`doctor-${u.key}`}>
+          <React.Fragment key={item.id}>
             <View
               style={[
                 styles.linkLine,
@@ -339,34 +368,39 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
                 },
               ]}
               onPress={() => {
-                const provider = fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length];
-                if (provider) {
-                  router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
-                } else {
-                  router.push('/(doctor-detail)?name=Dr. Max K.');
+                if (isPlaceholder) {
+                  onAddProviderPress();
+                  return;
+                }
+                if (!item.isManual) {
+                  router.push(`/(doctor-detail)?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
                 }
               }}
             >
-              <InitialsAvatar
-                name={fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length] 
-                  ? fastenProviders[idx % fastenProviders.length].name
-                  : 'Kendrick L.'}
-                size={getScaledFontSize(avatarSize)}
-              />
-              <Text 
-                style={[
-                  styles.orbitAvatarText,
-                  {
-                    fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)),
-                    fontWeight: getScaledFontWeight(500) as any,
-                    color: colors.text,
-                    textAlign: 'center',
-                  }
-                ]}>
-                {fastenProviders.length > 0 && fastenProviders[idx % fastenProviders.length] 
-                  ? formatProviderDisplayName(fastenProviders[idx % fastenProviders.length].name)
-                  : 'Kendrick L.'}
-              </Text>
+              {isPlaceholder ? (
+                <View style={[styles.addProviderAvatar, { width: getScaledFontSize(avatarSize), height: getScaledFontSize(avatarSize) }]}>
+                  <IconSymbol name="plus" size={getScaledFontSize(24)} color={colors.tint || '#008080'} />
+                </View>
+              ) : (
+                <>
+                  <InitialsAvatar
+                    name={item.name}
+                    size={getScaledFontSize(avatarSize)}
+                  />
+                  <Text 
+                    style={[
+                      styles.orbitAvatarText,
+                      {
+                        fontSize: getScaledFontSize(12 * Math.min(scaleFactor, 1.5)),
+                        fontWeight: getScaledFontWeight(500) as any,
+                        color: colors.text,
+                        textAlign: 'center',
+                      }
+                    ]}>
+                    {formatProviderDisplayName(item.name)}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </React.Fragment>
         );
@@ -374,41 +408,6 @@ function TabletCircleView({ doctors, userImg, colors, getScaledFontSize, getScal
     </View>
   );
 }
-
-// Function to generate random doctors array with roles
-const generateDoctors = (isTablet: boolean): Doctor[] => {
-  // Determine count range based on device type
-  const minCount = 5;
-  // Limit to 8 for both phones and iPad/tablets
-  const maxCount = 8;
-  
-  // Generate random count within range
-  const count = Math.floor(Math.random() * (maxCount - minCount + 1)) + minCount;
-  
-  // Create array of doctors
-  const doctors: Doctor[] = [];
-  
-  // Always add exactly 1 care manager
-  doctors.push({ key: 0, role: 'care_manager' });
-  
-  // Fill remaining slots with other roles
-  const remainingCount = count - 1;
-  const otherRoles: DoctorRole[] = ['provider', 'doctor_on_demand'];
-  
-  for (let i = 1; i <= remainingCount; i++) {
-    // Randomly assign provider or doctor_on_demand
-    const randomRole = otherRoles[Math.floor(Math.random() * otherRoles.length)];
-    doctors.push({ key: i, role: randomRole });
-  }
-  
-  // Shuffle the array to randomize care manager position
-  for (let i = doctors.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [doctors[i], doctors[j]] = [doctors[j], doctors[i]];
-  }
-  
-  return doctors;
-};
 
 // Default provider data structure (fallback)
 const defaultDepartments = [
@@ -448,27 +447,28 @@ const defaultDepartments = [
 
 // Circle Providers List View Component (shows providers from circle)
 interface CircleProvidersListViewProps {
-  doctors: Array<Doctor>;
+  providers: SelectedProvider[];
   userImg: any;
   colors: any;
   getScaledFontSize: (size: number) => number;
   getScaledFontWeight: (weight: number) => string | number;
-  fastenProviders?: FastenProvider[];
   patientName?: string;
+  hasUpcomingAppointments: boolean;
+  isCircleComplete: boolean;
 }
 
-function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight, fastenProviders = [], patientName = 'Jenny Wilson' }: CircleProvidersListViewProps) {
+function CircleProvidersListView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', hasUpcomingAppointments, isCircleComplete }: CircleProvidersListViewProps) {
   // Calculate max height to push appointments to bottom of screen
   const screenHeight = Dimensions.get('window').height;
-  const maxListHeight = Math.min(screenHeight * 0.65, 600);
+  const maxListHeight = hasUpcomingAppointments ? Math.min(screenHeight * 0.65, 600) : undefined;
 
   return (
     <View style={styles.listContainer}>
       <ScrollView
         style={[
           styles.listScrollView,
+          hasUpcomingAppointments ? { maxHeight: maxListHeight } : null,
           {
-            maxHeight: maxListHeight,
             borderWidth: 1,
             borderColor: colors.text + '15',
             borderRadius: getScaledFontSize(12),
@@ -511,12 +511,19 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
             ]}>Patient</Text>
           </View>
         </TouchableOpacity>
-        {doctors.map((doctor) => {
-          const isCareManager = doctor.role === 'care_manager';
-          const roleLabel = isCareManager ? 'Care Manager' : doctor.role === 'provider' ? 'Provider' : 'Doctor on Demand';
-          return (
+        {providers.length === 0 ? (
+          <View style={[styles.listItem, { paddingVertical: getScaledFontSize(16), paddingHorizontal: getScaledFontSize(16) }]}>
+            <Text style={[
+              {
+                fontSize: getScaledFontSize(14),
+                color: colors.text + '80',
+              }
+            ]}>No providers added yet</Text>
+          </View>
+        ) : (
+          providers.map((provider) => (
             <TouchableOpacity
-              key={`circle-provider-${doctor.key}`}
+              key={`circle-provider-${provider.id}`}
               style={[
                 styles.listItem,
                 {
@@ -525,20 +532,13 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
                   paddingHorizontal: getScaledFontSize(16),
                 }
               ]}
-              onPress={() => {
-                const provider = fastenProviders.length > 0 && fastenProviders[doctor.key % fastenProviders.length];
-                if (provider) {
-                  router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
-                } else {
-                  router.push('/(doctor-detail)?name=Dr. Max K.');
-                }
+              onPress={provider.isManual ? undefined : () => {
+                router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
               }}
-              activeOpacity={0.7}
+              activeOpacity={provider.isManual ? 1 : 0.7}
             >
               <InitialsAvatar 
-                name={fastenProviders.length > 0 && fastenProviders[doctor.key % fastenProviders.length] 
-                  ? fastenProviders[doctor.key % fastenProviders.length].name
-                  : 'Kendrick L.'}
+                name={provider.name} 
                 size={getScaledFontSize(56)} 
                 style={styles.listAvatar} 
               />
@@ -552,9 +552,7 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
                     marginBottom: getScaledFontSize(4),
                   }
                 ]}>
-                  {fastenProviders.length > 0 && fastenProviders[doctor.key % fastenProviders.length] 
-                    ? formatProviderDisplayName(fastenProviders[doctor.key % fastenProviders.length].name)
-                    : 'Kendrick L.'}
+                  {formatProviderDisplayName(provider.name)}
                 </Text>
                 <Text style={[
                   styles.listItemRole,
@@ -563,11 +561,15 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
                     fontWeight: getScaledFontWeight(400) as any,
                     color: colors.text + '80',
                   }
-                ]}>{roleLabel}</Text>
+                ]}>
+                  {provider.isManual
+                    ? (provider.relationship || provider.qualifications || 'Member')
+                    : (provider.qualifications || provider.specialty || 'Healthcare Provider')}
+                </Text>
               </View>
             </TouchableOpacity>
-          );
-        })}
+          ))
+        )}
         <View style={[
           styles.moreButtonContainer,
           {
@@ -575,18 +577,20 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
             paddingHorizontal: getScaledFontSize(16),
           }
         ]}>
-          <Button 
-            mode="contained" 
-            buttonColor="#008080"
-            onPress={() => router.push('/modal')} 
-            style={styles.moreDoctorsButton}
-            labelStyle={{ 
-              fontSize: getScaledFontSize(14), 
-              fontWeight: getScaledFontWeight(500) as any, 
-            }}
-          >
-            More
-          </Button>
+          {isCircleComplete && (
+            <Button 
+              mode="contained" 
+              buttonColor="#008080"
+              onPress={() => router.push('/modal')} 
+              style={styles.moreDoctorsButton}
+              labelStyle={{ 
+                fontSize: getScaledFontSize(14), 
+                fontWeight: getScaledFontWeight(500) as any, 
+              }}
+            >
+              More
+            </Button>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -595,23 +599,26 @@ function CircleProvidersListView({ doctors, userImg, colors, getScaledFontSize, 
 
 // List View Component (categories -> sub-categories -> providers)
 interface ListViewProps {
-  doctors: Array<Doctor>;
   userImg: any;
   colors: any;
   getScaledFontSize: (size: number) => number;
   getScaledFontWeight: (weight: number) => string | number;
   onItemPress: (categoryId?: string, subCategoryId?: string) => void;
-  fastenProviders?: FastenProvider[];
   patientName?: string;
+  hasUpcomingAppointments: boolean;
+  selectedProviderIds: Set<string>;
+  onAddProvider: (provider: SelectedProvider) => void;
+  onRemoveProvider: (providerId: string) => void;
+  maxCircleProviders: number;
 }
 
 type ListViewLevel = 'categories' | 'sub-categories' | 'providers';
 
-function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWeight, onItemPress, fastenProviders = [], patientName = 'Jenny Wilson' }: ListViewProps) {
+function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onItemPress, patientName = 'Jenny Wilson', hasUpcomingAppointments, selectedProviderIds, onAddProvider, onRemoveProvider, maxCircleProviders }: ListViewProps) {
   // Calculate max height to push appointments to bottom of screen
   const screenHeight = Dimensions.get('window').height;
   // Use larger percentage to push appointments section to bottom
-  const maxListHeight = Math.min(screenHeight * 0.65, 600); // Max 65% of screen or 600px, whichever is smaller
+  const maxListHeight = hasUpcomingAppointments ? Math.min(screenHeight * 0.65, 600) : undefined; // Max 65% of screen or 600px, whichever is smaller
 
   const [currentLevel, setCurrentLevel] = useState<ListViewLevel>('categories');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(undefined);
@@ -619,6 +626,41 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
   const [providersBySubCategory, setProvidersBySubCategory] = useState<Map<string, FastenProvider[]>>(new Map());
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
   const [lastVisitedFilter, setLastVisitedFilter] = useState<string | null>(null);
+  const [manualMembersBySubCategory, setManualMembersBySubCategory] = useState<Record<string, ManualMember[]>>({});
+  const [showAddMemberForm, setShowAddMemberForm] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualRelationship, setManualRelationship] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualSubCategoryId, setManualSubCategoryId] = useState<string | null>(null);
+  const [isSubCategoryMenuVisible, setIsSubCategoryMenuVisible] = useState(false);
+
+  const addManualMember = (categoryId: string, fallbackSubCategoryId?: string) => {
+    const targetSubCategoryId = manualSubCategoryId || fallbackSubCategoryId;
+    if (!targetSubCategoryId) return;
+    const trimmedName = manualName.trim();
+    if (!trimmedName) return;
+    const key = `${categoryId}-${targetSubCategoryId}`;
+    const newMember: ManualMember = {
+      id: `manual-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: trimmedName,
+      relationship: manualRelationship.trim() || undefined,
+      phone: manualPhone.trim() || undefined,
+      email: manualEmail.trim() || undefined,
+      categoryId,
+      subCategoryId: targetSubCategoryId,
+    };
+    setManualMembersBySubCategory(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), newMember],
+    }));
+    setManualName('');
+    setManualRelationship('');
+    setManualPhone('');
+    setManualEmail('');
+    setManualSubCategoryId(null);
+    setShowAddMemberForm(false);
+  };
 
   const lastVisitedFilters = [
     { id: '3m', label: 'Last 3 months', months: 3 },
@@ -642,11 +684,13 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
     return cutoff;
   };
 
-  const filterProvidersByLastVisited = (providers: FastenProvider[]) => {
+  const filterProvidersByLastVisited = (providers: SelectedProvider[]) => {
     if (!lastVisitedFilter) return providers;
     const cutoff = getCutoffDate(lastVisitedFilter);
     if (!cutoff) return providers;
     return providers.filter(provider => {
+      if (provider.isManual) return true;
+      if (provider.category && provider.category !== 'Medical') return true;
       if (!provider.lastVisited) return false;
       const visitedDate = new Date(provider.lastVisited);
       return visitedDate >= cutoff;
@@ -734,13 +778,27 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
     }
   };
 
-  const getCurrentProviders = (): FastenProvider[] => {
+  const getCurrentProviders = (): SelectedProvider[] => {
     if (!selectedCategoryId || !selectedSubCategoryId) return [];
     const key = `${selectedCategoryId}-${selectedSubCategoryId}`;
+    const category = getCategoryById(selectedCategoryId);
+    const subCategory = getSubCategoryById(selectedCategoryId, selectedSubCategoryId);
     const providers = providersBySubCategory.get(key) || [];
+    const manualMembers = manualMembersBySubCategory[key] || [];
+    const manualProviders: SelectedProvider[] = manualMembers.map(member => ({
+      id: member.id,
+      name: member.name,
+      qualifications: member.relationship || 'Member',
+      phone: member.phone,
+      email: member.email,
+      category: category?.name,
+      subCategory: subCategory?.name,
+      isManual: true,
+      relationship: member.relationship,
+    }));
     
     // Sort by lastVisited in descending order (most recently visited first)
-    const sortedProviders = [...providers].sort((a, b) => {
+    const sortedProviders = [...providers, ...manualProviders].sort((a, b) => {
       const dateA = a.lastVisited ? new Date(a.lastVisited).getTime() : 0;
       const dateB = b.lastVisited ? new Date(b.lastVisited).getTime() : 0;
       
@@ -795,14 +853,12 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
       </TouchableOpacity>
       {SUPPORT_CATEGORIES.map((category) => {
         // Count providers in this category
-        const categoryProviderCount = Array.from(providersBySubCategory.entries())
-          .filter(([key]) => key.startsWith(`${category.id}-`))
-          .reduce((sum, [, providers]) => sum + providers.length, 0);
-        
-        // Don't render categories with no providers
-        if (categoryProviderCount === 0) {
-          return null;
-        }
+        const categoryProviderCount = category.subCategories.reduce((sum, subCategory) => {
+          const key = `${category.id}-${subCategory.id}`;
+          const providers = providersBySubCategory.get(key) || [];
+          const manualMembers = manualMembersBySubCategory[key] || [];
+          return sum + providers.length + manualMembers.length;
+        }, 0);
         
         return (
           <TouchableOpacity
@@ -865,6 +921,18 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
     if (!selectedCategoryId) return null;
     const category = getCategoryById(selectedCategoryId);
     if (!category) return null;
+    const isNonMedicalCategory = category.id !== 'medical';
+    const subCategoriesWithData = category.subCategories.filter(subCategory => {
+      const key = `${category.id}-${subCategory.id}`;
+      const providers = providersBySubCategory.get(key) || [];
+      const manualMembers = manualMembersBySubCategory[key] || [];
+      return providers.length + manualMembers.length > 0;
+    });
+    const subCategoriesToShow = isNonMedicalCategory ? subCategoriesWithData : category.subCategories;
+    const showEmptyNonMedical = isNonMedicalCategory && subCategoriesWithData.length === 0;
+    const manualSubCategoryLabel = manualSubCategoryId
+      ? category.subCategories.find(sub => sub.id === manualSubCategoryId)?.name
+      : undefined;
 
     return (
       <>
@@ -909,16 +977,116 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
             />
           </View>
         </View>
-        {category.subCategories.map((subCategory) => {
+        {showEmptyNonMedical ? (
+          <View style={[
+            styles.addMemberContainer,
+            {
+              paddingHorizontal: getScaledFontSize(16),
+              paddingBottom: getScaledFontSize(8),
+            }
+          ]}>
+            {showAddMemberForm ? (
+              <View style={styles.addMemberForm}>
+                <Menu
+                  visible={isSubCategoryMenuVisible}
+                  onDismiss={() => setIsSubCategoryMenuVisible(false)}
+                  anchor={
+                    <Button
+                      mode="outlined"
+                      onPress={() => setIsSubCategoryMenuVisible(true)}
+                    >
+                      {manualSubCategoryLabel || 'Select sub-category'}
+                    </Button>
+                  }
+                >
+                  {category.subCategories.map(sub => (
+                    <Menu.Item
+                      key={sub.id}
+                      title={sub.name}
+                      onPress={() => {
+                        setManualSubCategoryId(sub.id);
+                        setIsSubCategoryMenuVisible(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
+                <PaperTextInput
+                  label="Full name"
+                  value={manualName}
+                  onChangeText={setManualName}
+                  mode="outlined"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Relationship"
+                  value={manualRelationship}
+                  onChangeText={setManualRelationship}
+                  mode="outlined"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Phone"
+                  value={manualPhone}
+                  onChangeText={setManualPhone}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Email"
+                  value={manualEmail}
+                  onChangeText={setManualEmail}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.addMemberInput}
+                />
+                <View style={styles.addMemberActions}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => {
+                      setShowAddMemberForm(false);
+                      setManualSubCategoryId(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={() => addManualMember(category.id)}
+                    disabled={!manualName.trim() || !manualSubCategoryId}
+                  >
+                    Add
+                  </Button>
+                </View>
+              </View>
+            ) : (
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setManualSubCategoryId(null);
+                  setShowAddMemberForm(true);
+                }}
+              >
+                Add member
+              </Button>
+            )}
+          </View>
+        ) : subCategoriesToShow.map((subCategory) => {
           const key = `${category.id}-${subCategory.id}`;
+          const providers = providersBySubCategory.get(key) || [];
+          const manualMembers = manualMembersBySubCategory[key] || [];
           const providerCount = filterProvidersByLastVisited(
-            providersBySubCategory.get(key) || []
+            [...providers, ...manualMembers.map(member => ({
+              id: member.id,
+              name: member.name,
+              qualifications: member.relationship || 'Member',
+              phone: member.phone,
+              email: member.email,
+              isManual: true,
+              relationship: member.relationship,
+            }))]
           ).length;
-          
-          // Don't render sub-categories with no providers
-          if (providerCount === 0) {
-            return null;
-          }
           
           return (
             <TouchableOpacity
@@ -984,6 +1152,14 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
     const subCategory = selectedCategoryId && selectedSubCategoryId 
       ? getSubCategoryById(selectedCategoryId, selectedSubCategoryId) 
       : undefined;
+    const isNonMedicalCategory = Boolean(selectedCategoryId && selectedCategoryId !== 'medical');
+    const canAddMember = isNonMedicalCategory && Boolean(selectedSubCategoryId);
+
+    const manualCategory = selectedCategoryId ? getCategoryById(selectedCategoryId) : undefined;
+    const availableSubCategories = manualCategory?.subCategories || [];
+    const manualSubCategoryLabel = manualSubCategoryId
+      ? availableSubCategories.find(sub => sub.id === manualSubCategoryId)?.name
+      : undefined;
 
     return (
       <>
@@ -1011,7 +1187,116 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
           ]}>
             {subCategory?.name || category?.name || 'Providers'}
           </Text>
+          {canAddMember ? (
+            <TouchableOpacity
+              onPress={() => setShowAddMemberForm(prev => !prev)}
+              style={{ padding: getScaledFontSize(4) }}
+            >
+              <IconSymbol name="plus" size={getScaledFontSize(22)} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: getScaledFontSize(24) }} />
+          )}
         </View>
+        {canAddMember && (
+          <View style={[
+            styles.addMemberContainer,
+            {
+              paddingHorizontal: getScaledFontSize(16),
+              paddingBottom: getScaledFontSize(8),
+            }
+          ]}>
+            {showAddMemberForm ? (
+              <View style={styles.addMemberForm}>
+                <Menu
+                  visible={isSubCategoryMenuVisible}
+                  onDismiss={() => setIsSubCategoryMenuVisible(false)}
+                  anchor={
+                    <Button
+                      mode="outlined"
+                      onPress={() => setIsSubCategoryMenuVisible(true)}
+                    >
+                      {manualSubCategoryLabel || subCategory?.name || 'Select sub-category'}
+                    </Button>
+                  }
+                >
+                  {availableSubCategories.map(sub => (
+                    <Menu.Item
+                      key={sub.id}
+                      title={sub.name}
+                      onPress={() => {
+                        setManualSubCategoryId(sub.id);
+                        setIsSubCategoryMenuVisible(false);
+                      }}
+                    />
+                  ))}
+                </Menu>
+                <PaperTextInput
+                  label="Full name"
+                  value={manualName}
+                  onChangeText={setManualName}
+                  mode="outlined"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Relationship"
+                  value={manualRelationship}
+                  onChangeText={setManualRelationship}
+                  mode="outlined"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Phone"
+                  value={manualPhone}
+                  onChangeText={setManualPhone}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  style={styles.addMemberInput}
+                />
+                <PaperTextInput
+                  label="Email"
+                  value={manualEmail}
+                  onChangeText={setManualEmail}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={styles.addMemberInput}
+                />
+                <View style={styles.addMemberActions}>
+                  <Button
+                    mode="outlined"
+                    onPress={() => {
+                      setShowAddMemberForm(false);
+                      setManualSubCategoryId(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    mode="contained"
+                    onPress={() => {
+                      if (!selectedCategoryId) return;
+                      addManualMember(selectedCategoryId, selectedSubCategoryId || undefined);
+                    }}
+                    disabled={!manualName.trim() || !(manualSubCategoryId || selectedSubCategoryId)}
+                  >
+                    Add
+                  </Button>
+                </View>
+              </View>
+            ) : (
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setManualSubCategoryId(selectedSubCategoryId || null);
+                  setShowAddMemberForm(true);
+                }}
+              >
+                Add member
+              </Button>
+            )}
+          </View>
+        )}
         {isLoadingProviders ? (
           <View style={[styles.listItem, { paddingVertical: getScaledFontSize(16), paddingHorizontal: getScaledFontSize(16) }]}>
             <Text style={[
@@ -1031,7 +1316,12 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
             ]}>No providers found</Text>
           </View>
         ) : (
-          providers.map((provider) => (
+          providers.map((provider) => {
+            const isSelected = selectedProviderIds.has(provider.id);
+            const isCircleFull = selectedProviderIds.size >= maxCircleProviders;
+            const canAdd = !isSelected && !isCircleFull;
+            const showAction = isSelected || !isCircleFull;
+            return (
             <TouchableOpacity
               key={provider.id}
               style={[
@@ -1040,12 +1330,13 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
                   borderBottomColor: colors.text + '20',
                   paddingVertical: getScaledFontSize(16),
                   paddingHorizontal: getScaledFontSize(16),
+                  backgroundColor: isSelected ? (colors.tint || '#008080') + '15' : 'transparent',
                 }
               ]}
-              onPress={() => {
+              onPress={provider.isManual ? undefined : () => {
                 router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
               }}
-              activeOpacity={0.7}
+              activeOpacity={provider.isManual ? 1 : 0.7}
             >
               <InitialsAvatar 
                 name={provider.name}
@@ -1072,11 +1363,33 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
                     color: colors.text + '80',
                   }
                 ]}>
-                  {provider.qualifications || provider.specialty || 'Healthcare Provider'}
+                  {provider.isManual
+                    ? (provider.relationship || provider.qualifications || 'Member')
+                    : (provider.qualifications || provider.specialty || 'Healthcare Provider')}
                 </Text>
               </View>
+              {showAction && (
+                <TouchableOpacity
+                  style={[
+                    styles.providerActionButton,
+                    { opacity: canAdd || isSelected ? 1 : 0.4 }
+                  ]}
+                  onPress={(event) => {
+                    event?.stopPropagation?.();
+                    if (isSelected) {
+                      onRemoveProvider(provider.id);
+                    } else if (canAdd) {
+                      onAddProvider(provider);
+                    }
+                  }}
+                  disabled={!canAdd && !isSelected}
+                >
+                  <IconSymbol name={isSelected ? 'minus' : 'plus'} size={getScaledFontSize(18)} color={colors.tint || '#008080'} />
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </>
     );
@@ -1087,8 +1400,8 @@ function ListView({ doctors, userImg, colors, getScaledFontSize, getScaledFontWe
       <ScrollView
         style={[
           styles.listScrollView,
+          hasUpcomingAppointments ? { maxHeight: maxListHeight } : null,
           {
-            maxHeight: maxListHeight,
             borderWidth: 1,
             borderColor: colors.text + '15',
             borderRadius: getScaledFontSize(12),
@@ -1114,12 +1427,13 @@ interface ProviderDetailsListProps {
   onBack: () => void;
   departmentId?: string;
   departmentName?: string;
+  hasUpcomingAppointments: boolean;
 }
 
-function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, onBack, departmentId, departmentName }: ProviderDetailsListProps) {
+function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, onBack, departmentId, departmentName, hasUpcomingAppointments }: ProviderDetailsListProps) {
   // Calculate max height to push appointments to bottom of screen
   const screenHeight = Dimensions.get('window').height;
-  const maxListHeight = Math.min(screenHeight * 0.65, 600);
+  const maxListHeight = hasUpcomingAppointments ? Math.min(screenHeight * 0.65, 600) : undefined;
   
   const [fastenProviders, setFastenProviders] = useState<FastenProvider[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
@@ -1252,8 +1566,8 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
       <ScrollView
         style={[
           styles.listScrollView,
+          hasUpcomingAppointments ? { maxHeight: maxListHeight } : null,
           {
-            maxHeight: maxListHeight,
             borderWidth: 1,
             borderColor: colors.text + '15',
             borderRadius: getScaledFontSize(12),
@@ -1325,9 +1639,20 @@ export default function HomeScreen() {
   // Load Fasten Health providers for circle view
   const [fastenProviders, setFastenProviders] = useState<FastenProvider[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
+  const { selectedProviders, addProvider, removeProvider } = useProviderSelection();
   const [patientName, setPatientName] = useState('Jenny Wilson');
   const [upcomingAppointments, setUpcomingAppointments] = useState<FastenAppointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
+
+  const circleProviders = React.useMemo(
+    () => selectedProviders.slice(0, MAX_SELECTED_PROVIDERS),
+    [selectedProviders]
+  );
+  const selectedProviderIds = React.useMemo(
+    () => new Set(circleProviders.map(provider => provider.id)),
+    [circleProviders]
+  );
+  const isCircleComplete = circleProviders.length >= MAX_SELECTED_PROVIDERS;
   
   // Helper function to get first name from full name
   const getFirstName = (fullName: string): string => {
@@ -1412,37 +1737,6 @@ export default function HomeScreen() {
 
     loadUpcomingAppointments();
   }, []);
-  
-  // Generate doctors for circle view - use Fasten Health providers if available
-  const doctors = React.useMemo(() => {
-    if (fastenProviders.length > 0) {
-      // Use Fasten Health providers, limit to 8 for circle view
-      const providerCount = Math.min(fastenProviders.length, 8);
-      const providerDoctors: Doctor[] = [];
-      
-      // Always add 1 care manager
-      providerDoctors.push({ key: 0, role: 'care_manager' });
-      
-      // Add providers
-      for (let i = 1; i < providerCount; i++) {
-        providerDoctors.push({ 
-          key: i, 
-          role: i % 2 === 0 ? 'provider' : 'doctor_on_demand' 
-        });
-      }
-      
-      // Shuffle to randomize care manager position
-      for (let i = providerDoctors.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [providerDoctors[i], providerDoctors[j]] = [providerDoctors[j], providerDoctors[i]];
-      }
-      
-      return providerDoctors;
-    }
-    
-    // Fallback to generated doctors
-    return generateDoctors(isTabletDevice);
-  }, [fastenProviders, isTabletDevice]);
   
   // Cycle through views: circle -> circle-providers -> list -> circle
   const toggleViewMode = () => {
@@ -1572,23 +1866,25 @@ export default function HomeScreen() {
           {viewMode === 'circle' ? (
             isTabletDevice ? (
               <TabletCircleView 
-                doctors={doctors}
+                providers={circleProviders}
                 userImg={userImg}
                 colors={colors}
                 getScaledFontSize={getScaledFontSize}
                 getScaledFontWeight={getScaledFontWeight}
-                fastenProviders={fastenProviders}
                 patientName={patientName}
+                onAddProviderPress={() => router.push('/modal')}
+                isCircleComplete={isCircleComplete}
               />
             ) : (
               <PhoneCircleView 
-                doctors={doctors}
+                providers={circleProviders}
                 userImg={userImg}
                 colors={colors}
                 getScaledFontSize={getScaledFontSize}
                 getScaledFontWeight={getScaledFontWeight}
-                fastenProviders={fastenProviders}
                 patientName={patientName}
+                onAddProviderPress={() => router.push('/modal')}
+                isCircleComplete={isCircleComplete}
               />
             )
           ) : viewMode === 'list' ? (
@@ -1604,7 +1900,6 @@ export default function HomeScreen() {
                 pointerEvents={showProviderDetails ? 'none' : 'auto'}
               >
                 <ListView
-                  doctors={doctors}
                   userImg={userImg}
                   colors={colors}
                   getScaledFontSize={getScaledFontSize}
@@ -1614,8 +1909,12 @@ export default function HomeScreen() {
                     // This callback is called when a sub-category is selected
                     console.log(`Selected category: ${categoryId}, sub-category: ${subCategoryId}`);
                   }}
-                  fastenProviders={fastenProviders}
                   patientName={patientName}
+                  hasUpcomingAppointments={upcomingAppointments.length > 0}
+                  selectedProviderIds={selectedProviderIds}
+                  onAddProvider={addProvider}
+                  onRemoveProvider={removeProvider}
+                  maxCircleProviders={MAX_SELECTED_PROVIDERS}
                 />
               </Animated.View>
               <Animated.View
@@ -1640,18 +1939,20 @@ export default function HomeScreen() {
                   }}
                   departmentId={selectedDepartmentId}
                   departmentName={selectedDepartmentName}
+                  hasUpcomingAppointments={upcomingAppointments.length > 0}
                 />
               </Animated.View>
             </View>
           ) : (
             <CircleProvidersListView
-              doctors={doctors}
+              providers={circleProviders}
               userImg={userImg}
               colors={colors}
               getScaledFontSize={getScaledFontSize}
               getScaledFontWeight={getScaledFontWeight}
-              fastenProviders={fastenProviders}
               patientName={patientName}
+              hasUpcomingAppointments={upcomingAppointments.length > 0}
+              isCircleComplete={isCircleComplete}
             />
           )}
         </View>
@@ -1793,6 +2094,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 56,
     height: 80,
+  },
+  addProviderAvatar: {
+    borderWidth: 2,
+    borderColor: '#008080',
+    borderStyle: 'dashed',
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   avatarWithBorder: {
     backgroundColor: '#fff',
@@ -1954,6 +2264,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     width: '100%',
   },
+  providerActionButton: {
+    marginLeft: 'auto',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#008080',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   listAvatar: {
     backgroundColor: 'transparent',
   },
@@ -1962,6 +2282,21 @@ const styles = StyleSheet.create({
   },
   listItemRole: {
     // Styles applied inline
+  },
+  addMemberContainer: {
+    width: '100%',
+  },
+  addMemberForm: {
+    width: '100%',
+    gap: 10,
+  },
+  addMemberInput: {
+    backgroundColor: 'transparent',
+  },
+  addMemberActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   listViewContainer: {
     width: '100%',

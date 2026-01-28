@@ -1,8 +1,9 @@
 import { useAccessibility } from '@/stores/accessibility-store';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Avatar, Card, Switch, Text } from 'react-native-paper';
 import { InitialsAvatar } from '@/utils/avatar-utils';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 
 interface DoctorCardProps {
   id: string;
@@ -13,6 +14,11 @@ interface DoctorCardProps {
   switchValue?: boolean;
   onSwitchChange?: (value: boolean) => void;
   onPress?: () => void;
+  highlighted?: boolean;
+  actionIconName?: string;
+  actionDisabled?: boolean;
+  onActionPress?: () => void;
+  actionColor?: string;
 }
 
 export function DoctorCard({
@@ -24,6 +30,11 @@ export function DoctorCard({
   switchValue = false,
   onSwitchChange,
   onPress,
+  highlighted = false,
+  actionIconName,
+  actionDisabled = false,
+  onActionPress,
+  actionColor = '#008080',
 }: DoctorCardProps) {
   const { getScaledFontSize, getScaledFontWeight } = useAccessibility();
 
@@ -32,7 +43,7 @@ export function DoctorCard({
   const cardMargin = getScaledFontSize(12);
 
   return (
-    <Card style={[styles.card, { marginBottom: cardMargin }]} onPress={onPress}>
+    <Card style={[styles.card, highlighted ? styles.cardHighlighted : null, { marginBottom: cardMargin }]} onPress={onPress}>
       <Card.Content style={[styles.cardContent, { padding: dynamicPadding }]}>
         <View style={styles.contentRow}>
           {image ? (
@@ -75,6 +86,20 @@ export function DoctorCard({
               {qualifications}
             </Text>
           </View>
+          {actionIconName && (
+            <TouchableOpacity
+              style={[styles.actionButton, actionDisabled ? styles.actionButtonDisabled : null]}
+              onPress={(event) => {
+                event?.stopPropagation?.();
+                if (!actionDisabled) {
+                  onActionPress?.();
+                }
+              }}
+              disabled={actionDisabled}
+            >
+              <IconSymbol name={actionIconName} size={getScaledFontSize(18)} color={actionColor} />
+            </TouchableOpacity>
+          )}
           {showSwitch && (
             <View style={[styles.switchContainer, { paddingLeft: dynamicPadding }]}>
               <Switch
@@ -94,6 +119,9 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  cardHighlighted: {
+    backgroundColor: '#00808015',
   },
   cardContent: {
     padding: 16,
@@ -121,5 +149,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexShrink: 0,
+  },
+  actionButton: {
+    marginLeft: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#008080',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonDisabled: {
+    opacity: 0.4,
   },
 });
