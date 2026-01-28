@@ -43,18 +43,25 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(24)} name="person.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="today-schedule"
         options={{
           title: "Today's Schedule",
           tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(24)} name="calendar" color={color} />,
           href: null
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="connected-ehrs"
+        options={{
+          title: 'Connected EHRs',
+          href: null,
         }}
       />
     </Tabs>

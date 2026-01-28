@@ -33,8 +33,8 @@ export function CustomScrollableTabBar({ state, descriptors, navigation }: Botto
     if (href === null) {
       return false;
     }
-    // Also hide "today-schedule" route explicitly as a fallback
-    if (route.name === 'today-schedule') {
+    // Also hide specific routes explicitly as a fallback
+    if (route.name === 'today-schedule' || route.name === 'profile' || route.name === 'connected-ehrs') {
       return false;
     }
     return true;
