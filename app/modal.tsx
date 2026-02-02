@@ -123,7 +123,7 @@ export default function ModalScreen() {
   };
 
   const selectedProviderIds = React.useMemo(
-    () => new Set(selectedProviders.map(provider => provider.id)),
+    () => new Set(selectedProviders.map(provider => String(provider.id))),
     [selectedProviders]
   );
   const isCircleFull = selectedProviders.length >= MAX_SELECTED_PROVIDERS;
@@ -557,7 +557,7 @@ export default function ModalScreen() {
                               </View>
                             ) : (
                               combinedProviders.map((provider) => {
-                                const isSelected = selectedProviderIds.has(provider.id);
+                                const isSelected = selectedProviderIds.has(String(provider.id));
                                 const canAdd = !isSelected && !isCircleFull;
                                 const showAction = isSelected || !isCircleFull;
                                 return (
@@ -603,7 +603,7 @@ export default function ModalScreen() {
                       </View>
                     ) : (
                       filterProvidersByLastVisited(category.doctors).map((provider) => {
-                        const isSelected = selectedProviderIds.has(provider.id);
+                        const isSelected = selectedProviderIds.has(String(provider.id));
                         const canAdd = !isSelected && !isCircleFull;
                         const showAction = isSelected || !isCircleFull;
                         return (

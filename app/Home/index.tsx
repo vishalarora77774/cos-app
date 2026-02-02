@@ -1317,7 +1317,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
           </View>
         ) : (
           providers.map((provider) => {
-            const isSelected = selectedProviderIds.has(provider.id);
+            const isSelected = selectedProviderIds.has(String(provider.id));
             const isCircleFull = selectedProviderIds.size >= maxCircleProviders;
             const canAdd = !isSelected && !isCircleFull;
             const showAction = isSelected || !isCircleFull;
@@ -1649,7 +1649,7 @@ export default function HomeScreen() {
     [selectedProviders]
   );
   const selectedProviderIds = React.useMemo(
-    () => new Set(circleProviders.map(provider => provider.id)),
+    () => new Set(circleProviders.map(provider => String(provider.id))),
     [circleProviders]
   );
   const isCircleComplete = circleProviders.length >= MAX_SELECTED_PROVIDERS;

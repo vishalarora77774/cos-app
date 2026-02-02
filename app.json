@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.joinabrightfuture.cos",
+      "buildNumber": "2",
       "associatedDomains": [
         "applinks:joinabrightfuture.com",
         "applinks:*.joinabrightfuture.com"
@@ -71,6 +72,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "db5ae0fd-1ee7-45a4-b143-204dfaa68c7f"
+      }
     }
   }
 }

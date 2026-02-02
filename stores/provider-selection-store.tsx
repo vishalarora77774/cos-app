@@ -31,7 +31,7 @@ export function ProviderSelectionProvider({ children }: { children: ReactNode })
 
   useEffect(() => {
     if (!isLoading) {
-      saveSelectedProviders();
+      saveSelectedProviders(selectedProviders);
     }
   }, [selectedProviders, isLoading]);
 
@@ -40,7 +40,12 @@ export function ProviderSelectionProvider({ children }: { children: ReactNode })
       const storedProviders = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedProviders) {
         const parsedProviders = JSON.parse(storedProviders) as SelectedProvider[];
-        setSelectedProviders(Array.isArray(parsedProviders) ? parsedProviders : []);
+        const normalized = Array.isArray(parsedProviders)
+          ? parsedProviders
+              .filter(provider => provider && provider.id !== undefined && provider.id !== null)
+              .map(provider => sanitizeProviderForStorage(provider))
+          : [];
+        setSelectedProviders(normalized);
       }
     } catch (error) {
       console.error('Error loading selected providers:', error);
@@ -49,28 +54,56 @@ export function ProviderSelectionProvider({ children }: { children: ReactNode })
     }
   };
 
-  const saveSelectedProviders = async () => {
+  const saveSelectedProviders = async (providers: SelectedProvider[]) => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(selectedProviders));
+      const sanitized = providers.map(sanitizeProviderForStorage);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
     } catch (error) {
       console.error('Error saving selected providers:', error);
     }
   };
 
+  const sanitizeProviderForStorage = (provider: SelectedProvider): SelectedProvider => ({
+    id: String(provider.id),
+    name: provider.name,
+    qualifications: provider.qualifications,
+    specialty: provider.specialty,
+    // Skip image to avoid non-serializable payloads
+    image: undefined,
+    photoUrl: provider.photoUrl,
+    phone: provider.phone,
+    email: provider.email,
+    category: provider.category,
+    subCategory: provider.subCategory,
+    subCategories: provider.subCategories,
+    lastVisited: provider.lastVisited,
+    isManual: provider.isManual,
+    relationship: provider.relationship,
+  });
+
   const addProvider = (provider: SelectedProvider) => {
     setSelectedProviders(prev => {
-      if (prev.some(item => item.id === provider.id)) return prev;
+      const providerId = String(provider.id);
+      if (prev.some(item => item.id === providerId)) return prev;
       if (prev.length >= MAX_SELECTED_PROVIDERS) return prev;
-      return [...prev, provider];
+      const next = [...prev, sanitizeProviderForStorage({ ...provider, id: providerId })];
+      saveSelectedProviders(next);
+      return next;
     });
   };
 
   const removeProvider = (providerId: string) => {
-    setSelectedProviders(prev => prev.filter(item => item.id !== providerId));
+    const normalizedId = String(providerId);
+    setSelectedProviders(prev => {
+      const next = prev.filter(item => item.id !== normalizedId);
+      saveSelectedProviders(next);
+      return next;
+    });
   };
 
   const clearProviders = () => {
     setSelectedProviders([]);
+    saveSelectedProviders([]);
   };
 
   const value: ProviderSelectionContextType = {
