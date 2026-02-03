@@ -6,6 +6,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AccessibilityProvider } from '@/stores/accessibility-store';
+import { ProviderSelectionProvider } from '@/stores/provider-selection-store';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -16,43 +17,45 @@ export default function RootLayout() {
 
   return (
     <AccessibilityProvider>
-      <PaperProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            {/** Splash at index - decides where to go. */}
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            {/** Auth stack - sign-in / sign-up */}
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            {/** Main tabs */}
-            <Stack.Screen name="Home" options={{ headerShown: false }} />
-            <Stack.Screen 
-              name="modal" 
-              options={{ 
-                presentation: 'modal', 
-                title: 'Doctors',
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="appointments-modal" 
-              options={{ 
-                presentation: 'modal', 
-                title: 'All Appointments',
-                headerShown: false,
-              }} 
-            />
-            <Stack.Screen 
-              name="today-schedule" 
-              options={{ 
-                title: "Today's Schedule",
-                headerShown: false,
-                autoHideHomeIndicator: true,
-              }} 
-            />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </PaperProvider>
+      <ProviderSelectionProvider>
+        <PaperProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack>
+              {/** Splash at index - decides where to go. */}
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              {/** Auth stack - sign-in / sign-up */}
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              {/** Main tabs */}
+              <Stack.Screen name="Home" options={{ headerShown: false }} />
+              <Stack.Screen 
+                name="modal" 
+                options={{ 
+                  presentation: 'modal', 
+                  title: 'Doctors',
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="appointments-modal" 
+                options={{ 
+                  presentation: 'modal', 
+                  title: 'All Appointments',
+                  headerShown: false,
+                }} 
+              />
+              <Stack.Screen 
+                name="today-schedule" 
+                options={{ 
+                  title: "Today's Schedule",
+                  headerShown: false,
+                  autoHideHomeIndicator: true,
+                }} 
+              />
+            </Stack>
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </PaperProvider>
+      </ProviderSelectionProvider>
     </AccessibilityProvider>
   );
 }

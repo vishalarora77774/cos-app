@@ -311,6 +311,8 @@ const matchSubcategories = (
     .filter(sub => sub.keywords.some(keyword => combined.includes(keyword)))
     .map(sub => sub.name);
 
+const INCLUDE_NON_MEDICAL_CATEGORIES = false;
+
 /**
  * Categorizes a provider based on their qualifications, specialty, and name
  * A provider can belong to multiple subcategories (e.g., an MD can be both PCP and Specialist)
@@ -328,49 +330,51 @@ export function categorizeProvider(provider: {
   const name = (provider.name || '').toLowerCase();
   const combined = `${quals} ${specialty} ${name}`.toLowerCase();
 
-  const mentalMatches = matchSubcategories(combined, MENTAL_HEALTH_SUBCATEGORIES);
-  if (mentalMatches.length > 0) {
-    return {
-      category: 'Mental Health',
-      subCategory: mentalMatches[0],
-      subCategories: mentalMatches,
-    };
-  }
+  if (INCLUDE_NON_MEDICAL_CATEGORIES) {
+    const mentalMatches = matchSubcategories(combined, MENTAL_HEALTH_SUBCATEGORIES);
+    if (mentalMatches.length > 0) {
+      return {
+        category: 'Mental Health',
+        subCategory: mentalMatches[0],
+        subCategories: mentalMatches,
+      };
+    }
 
-  const familyMatches = matchSubcategories(combined, FAMILY_SUBCATEGORIES);
-  if (familyMatches.length > 0) {
-    return {
-      category: 'Family',
-      subCategory: familyMatches[0],
-      subCategories: familyMatches,
-    };
-  }
+    const familyMatches = matchSubcategories(combined, FAMILY_SUBCATEGORIES);
+    if (familyMatches.length > 0) {
+      return {
+        category: 'Family',
+        subCategory: familyMatches[0],
+        subCategories: familyMatches,
+      };
+    }
 
-  const socialMatches = matchSubcategories(combined, SOCIAL_SUBCATEGORIES);
-  if (socialMatches.length > 0) {
-    return {
-      category: 'Social/Leisure',
-      subCategory: socialMatches[0],
-      subCategories: socialMatches,
-    };
-  }
+    const socialMatches = matchSubcategories(combined, SOCIAL_SUBCATEGORIES);
+    if (socialMatches.length > 0) {
+      return {
+        category: 'Social/Leisure',
+        subCategory: socialMatches[0],
+        subCategories: socialMatches,
+      };
+    }
 
-  const faithMatches = matchSubcategories(combined, FAITH_SUBCATEGORIES);
-  if (faithMatches.length > 0) {
-    return {
-      category: 'Faith',
-      subCategory: faithMatches[0],
-      subCategories: faithMatches,
-    };
-  }
+    const faithMatches = matchSubcategories(combined, FAITH_SUBCATEGORIES);
+    if (faithMatches.length > 0) {
+      return {
+        category: 'Faith',
+        subCategory: faithMatches[0],
+        subCategories: faithMatches,
+      };
+    }
 
-  const servicesMatches = matchSubcategories(combined, SERVICES_SUBCATEGORIES);
-  if (servicesMatches.length > 0) {
-    return {
-      category: 'Services',
-      subCategory: servicesMatches[0],
-      subCategories: servicesMatches,
-    };
+    const servicesMatches = matchSubcategories(combined, SERVICES_SUBCATEGORIES);
+    if (servicesMatches.length > 0) {
+      return {
+        category: 'Services',
+        subCategory: servicesMatches[0],
+        subCategories: servicesMatches,
+      };
+    }
   }
 
   // Check for Medical category providers

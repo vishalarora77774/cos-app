@@ -1,25 +1,13 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
+import { ProfileContent } from '@/components/profile-content';
 import { useAccessibility } from '@/stores/accessibility-store';
-import { processFastenHealthDataFromFile } from '@/services/fasten-health-processor';
-import { USE_MOCK_DATA, getFastenHealthDataName } from '@/services/fasten-health-config';
+import { useConnectedEhrs } from '@/hooks/use-connected-ehrs';
 import { Image } from 'expo-image';
-import { router, usePathname } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-interface ConnectedHospital {
-  id: string;
-  name: string;
-  provider: string;
-  connectedDate: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  phone?: string;
-  email?: string;
-}
 
 interface AppWrapperProps {
   children: React.ReactNode;
@@ -41,85 +29,25 @@ export function AppWrapper({
 }: AppWrapperProps) {
   const { settings, increaseFontSize, decreaseFontSize, toggleBoldText, toggleTheme, getScaledFontWeight, getScaledFontSize } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
-  const pathname = usePathname();
   const [isAccessibilityModalVisible, setIsAccessibilityModalVisible] = useState(false);
   const [isDrawerMenuVisible, setIsDrawerMenuVisible] = useState(false);
-  const [connectedHospitals, setConnectedHospitals] = useState<ConnectedHospital[]>([]);
-  const [isLoadingClinics, setIsLoadingClinics] = useState(false);
-
-  // Load clinics from FHIR data
-  const loadClinics = async () => {
-    setIsLoadingClinics(true);
-    try {
-      const dataSourceName = getFastenHealthDataName();
-      console.log(`🔄 Loading clinics from ${dataSourceName} data (USE_MOCK_DATA: ${USE_MOCK_DATA})`);
-      
-      const processedData = await processFastenHealthDataFromFile();
-      
-      // Transform ProcessedClinic to ConnectedHospital format
-      const hospitals: ConnectedHospital[] = processedData.clinics.map((clinic, index) => {
-        // Generate a connection date (simulate connection dates over the past year)
-        const connectionDate = new Date();
-        connectionDate.setMonth(connectionDate.getMonth() - (index * 2)); // Stagger connection dates
-        
-        // Determine provider based on clinic name or use default
-        const providerNames = ['EPIC', 'Cerner', 'Allscripts', 'athenahealth', 'NextGen'];
-        const provider = providerNames[index % providerNames.length];
-        
-        // Format address
-        const addressParts = [];
-        if (clinic.address?.line && clinic.address.line.length > 0) {
-          addressParts.push(clinic.address.line[0]);
-        }
-        if (clinic.address?.city) {
-          addressParts.push(clinic.address.city);
-        }
-        if (clinic.address?.state) {
-          addressParts.push(clinic.address.state);
-        }
-        if (clinic.address?.zip) {
-          addressParts.push(clinic.address.zip);
-        }
-        const fullAddress = addressParts.join(', ');
-        
-        return {
-          id: clinic.id,
-          name: clinic.name,
-          provider: provider,
-          connectedDate: connectionDate.toISOString().split('T')[0],
-          address: fullAddress || undefined,
-          city: clinic.address?.city,
-          state: clinic.address?.state,
-          phone: clinic.phone,
-          email: clinic.email,
-        };
-      });
-      
-      setConnectedHospitals(hospitals);
-      console.log(`✅ Loaded ${hospitals.length} connected clinics from ${dataSourceName} data`);
-      if (hospitals.length > 0) {
-        console.log(`📋 Clinic names: ${hospitals.map(h => h.name).join(', ')}`);
-      }
-    } catch (error) {
-      console.error('Error loading clinics:', error);
-      // Keep empty array on error
-      setConnectedHospitals([]);
-    } finally {
-      setIsLoadingClinics(false);
-    }
-  };
-
-  // Load clinics on mount
-  useEffect(() => {
-    loadClinics();
-  }, []);
+  const { connectedHospitals, isLoadingClinics, refreshConnectedEhrs } = useConnectedEhrs();
+  const { width } = useWindowDimensions();
+  const drawerWidth = Math.min(width * 0.95, 480);
+  const drawerTranslateX = useRef(new Animated.Value(-drawerWidth)).current;
 
   // Reload clinics when drawer opens to ensure fresh data
   useEffect(() => {
     if (isDrawerMenuVisible) {
-      loadClinics();
+      refreshConnectedEhrs();
     }
-  }, [isDrawerMenuVisible]);
+  }, [isDrawerMenuVisible, refreshConnectedEhrs]);
+
+  useEffect(() => {
+    if (!isDrawerMenuVisible) {
+      drawerTranslateX.setValue(-drawerWidth);
+    }
+  }, [drawerWidth, drawerTranslateX, isDrawerMenuVisible]);
 
   const handleTabPress = (route: string) => {
     router.push(`/(tabs)/${route}` as any);
@@ -135,6 +63,11 @@ export function AppWrapper({
 
   const handleHamburgerPress = () => {
     setIsDrawerMenuVisible(true);
+    Animated.timing(drawerTranslateX, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
   };
 
   const closeAccessibilityModal = () => {
@@ -142,7 +75,15 @@ export function AppWrapper({
   };
 
   const closeDrawerMenu = () => {
-    setIsDrawerMenuVisible(false);
+    Animated.timing(drawerTranslateX, {
+      toValue: -drawerWidth,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setIsDrawerMenuVisible(false);
+      }
+    });
   };
 
   const handleConnectEHR = () => {
@@ -208,115 +149,46 @@ export function AppWrapper({
         {children}
       </View>
 
-      {/* Drawer Menu Modal */}
-      <Modal
-        visible={isDrawerMenuVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={closeDrawerMenu}
-      >
-        <SafeAreaView style={[styles.modalContainer, { backgroundColor: colors.background }]} edges={['top', 'left', 'right']}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.text + '20' }]}>
-            <Text style={[styles.modalTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>EHR Connections</Text>
-            <TouchableOpacity onPress={closeDrawerMenu}>
-              <IconSymbol name="xmark" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.modalContent}>
-            {/* Connect Another EHR Option */}
-            <TouchableOpacity 
-              style={[styles.ehrOption, { borderBottomColor: colors.text + '20' }]}
-              onPress={handleConnectEHR}
-            >
-              <View style={styles.ehrOptionContent}>
-                <IconSymbol name="plus" size={getScaledFontSize(24)} color={colors.tint} />
-                <Text style={[styles.ehrOptionText, { color: colors.tint, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>
-                  Connect Another EHR
+      {isDrawerMenuVisible && (
+        <View style={styles.drawerOverlay}>
+          <Pressable
+            style={[styles.drawerBackdrop, { backgroundColor: colors.text + '40' }]}
+            onPress={closeDrawerMenu}
+          />
+          <Animated.View
+            style={[
+              styles.drawerContainer,
+              {
+                backgroundColor: colors.background,
+                width: drawerWidth,
+                transform: [{ translateX: drawerTranslateX }],
+              },
+            ]}
+          >
+            <SafeAreaView style={styles.drawerSafeArea} edges={['top', 'bottom', 'left', 'right']}>
+              <View style={[styles.drawerHeader, { borderBottomColor: colors.text + '20' }]}>
+                <Text style={[styles.drawerTitle, { color: colors.text, fontSize: getScaledFontSize(18), fontWeight: getScaledFontWeight(600) as any }]}>
+                  Profile
                 </Text>
+                <TouchableOpacity onPress={closeDrawerMenu}>
+                  <IconSymbol name="xmark" size={22} color={colors.text} />
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-
-            {/* Divider */}
-            {connectedHospitals.length > 0 && (
-              <View style={[styles.divider, { backgroundColor: colors.text + '20' }]} />
-            )}
-
-            {/* Loading State */}
-            {isLoadingClinics && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.tint} />
-                <Text style={[styles.loadingText, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
-                  Loading clinics...
-                </Text>
-              </View>
-            )}
-
-            {/* Connected Clinics List */}
-            {!isLoadingClinics && connectedHospitals.length > 0 && (
-              <View style={styles.connectedHospitalsSection}>
-                <Text style={[styles.sectionTitle, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
-                  Connected Clinics ({connectedHospitals.length})
-                </Text>
-                {connectedHospitals.map((hospital) => (
-                  <TouchableOpacity 
-                    key={hospital.id}
-                    style={[styles.hospitalItem, { borderBottomColor: colors.text + '10' }]}
-                    onPress={() => {
-                      // TODO: Handle clinic selection/view details
-                      // Could navigate to a clinic detail screen showing all data from that clinic
-                      closeDrawerMenu();
-                    }}
-                  >
-                    <View style={styles.hospitalItemContent}>
-                      <View style={styles.hospitalInfo}>
-                        <Text style={[styles.hospitalName, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>
-                          {hospital.name}
-                        </Text>
-                        <View style={styles.hospitalDetails}>
-                          <Text style={[styles.hospitalProvider, { color: colors.text + '80', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any }]}>
-                            {hospital.provider}
-                          </Text>
-                          {hospital.address && (
-                            <Text style={[styles.hospitalAddress, { color: colors.text + '70', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
-                              {hospital.address}
-                            </Text>
-                          )}
-                          {hospital.phone && (
-                            <Text style={[styles.hospitalPhone, { color: colors.text + '70', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
-                              📞 {hospital.phone}
-                            </Text>
-                          )}
-                        </View>
-                        <Text style={[styles.hospitalDate, { color: colors.text + '60', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any }]}>
-                          Connected on {new Date(hospital.connectedDate).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric' 
-                          })}
-                        </Text>
-                      </View>
-                      <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {!isLoadingClinics && connectedHospitals.length === 0 && (
-              <View style={styles.emptyState}>
-                <IconSymbol name="building.2" size={getScaledFontSize(48)} color={colors.text + '40'} />
-                <Text style={[styles.emptyStateText, { color: colors.text + '60', fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(400) as any, marginTop: 16 }]}>
-                  No connected clinics yet
-                </Text>
-                <Text style={[styles.emptyStateSubtext, { color: colors.text + '50', fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(400) as any, marginTop: 8 }]}>
-                  Connect your first EHR to get started
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+              <ProfileContent
+                showConnectedEhrButton
+                onConnectedEhrPress={() => {
+                  closeDrawerMenu();
+                  router.push('/Home/connected-ehrs');
+                }}
+                connectedHospitals={connectedHospitals}
+                isLoadingClinics={isLoadingClinics}
+                onConnectEhr={handleConnectEHR}
+                containerStyle={styles.drawerContent}
+              />
+            </SafeAreaView>
+          </Animated.View>
+        </View>
+      )}
 
       {/* Accessibility Modal */}
       <Modal
@@ -468,6 +340,42 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  drawerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+  },
+  drawerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  drawerContainer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  drawerSafeArea: {
+    flex: 1,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  drawerContent: {
+    paddingTop: 16,
   },
   tabContainer: {
     flexDirection: 'row',
