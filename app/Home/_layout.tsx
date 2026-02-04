@@ -64,6 +64,20 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="emergency-contact"
+        options={{
+          title: 'Emergency Contact',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="health-details"
+        options={{
+          title: 'Health Details',
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

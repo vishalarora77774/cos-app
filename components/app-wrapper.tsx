@@ -180,6 +180,14 @@ export function AppWrapper({
                   closeDrawerMenu();
                   router.push('/Home/connected-ehrs');
                 }}
+                onEmergencyContactPress={() => {
+                  closeDrawerMenu();
+                  router.push('/Home/emergency-contact');
+                }}
+                onHealthDetailsPress={() => {
+                  closeDrawerMenu();
+                  router.push('/Home/health-details');
+                }}
                 connectedHospitals={connectedHospitals}
                 isLoadingClinics={isLoadingClinics}
                 onConnectEhr={handleConnectEHR}

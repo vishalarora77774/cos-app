@@ -1,13 +1,14 @@
 import { DoctorCard } from '@/components/ui/doctor-card';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import React, { useRef, useState, useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Linking, Alert, Platform } from 'react-native';
-import { Avatar, Card } from 'react-native-paper';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Linking, Alert, Platform, Modal, Image } from 'react-native';
+import { Avatar, Card, Button, Portal } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { getFastenPractitionerById, Provider, getProviderDiagnosesAndTreatmentPlans, getProviderProgressNotes, getProviderAppointments, TreatmentPlanItem, ProgressNote, ProviderAppointment } from '@/services/fasten-health';
 import { InitialsAvatar } from '@/utils/avatar-utils';
+import { useDoctor } from '@/hooks/use-doctor';
 
 export default function DoctorDetailScreen() {
   const params = useLocalSearchParams();
@@ -20,6 +21,8 @@ export default function DoctorDetailScreen() {
   const [progressNotes, setProgressNotes] = useState<ProgressNote[]>([]);
   const [appointments, setAppointments] = useState<ProviderAppointment[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Get provider data from params or load by ID
   const providerId = params.id as string | undefined;
@@ -27,8 +30,23 @@ export default function DoctorDetailScreen() {
   const providerQualifications = params.qualifications as string || 'MD, Physical Medicine & Rehabilitation';
   const providerSpecialty = params.specialty as string || 'General';
   
-  const doctorName = provider?.name || providerName;
-  const doctorImage = require('@/assets/images/dummy.jpg');
+  // Load doctor data from database
+  const { doctor: doctorData, updateDoctor, pickImage, isLoading: isLoadingDoctor } = useDoctor(providerId || '');
+  
+  // Use database data if available, otherwise fall back to provider/params
+  const doctorName = doctorData?.name || provider?.name || providerName;
+  const doctorImage = doctorData?.photoUrl 
+    ? { uri: doctorData.photoUrl } 
+    : require('@/assets/images/dummy.jpg');
+  
+  // Edit form state
+  const [editedData, setEditedData] = useState({
+    name: doctorName,
+    specialty: doctorData?.specialty || providerSpecialty,
+    phone: doctorData?.phone || provider?.phone || '',
+    email: doctorData?.email || provider?.email || '',
+    photoUrl: doctorData?.photoUrl || '',
+  });
 
   const [activeTab, setActiveTab] = useState('treatment');
   const [doctorShares, setDoctorShares] = useState<{ [key: number]: boolean }>({
@@ -38,6 +56,27 @@ export default function DoctorDetailScreen() {
     4: false,
   });
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Update edited data when doctor data changes
+  useEffect(() => {
+    if (doctorData) {
+      setEditedData({
+        name: doctorData.name,
+        specialty: doctorData.specialty || providerSpecialty,
+        phone: doctorData.phone || '',
+        email: doctorData.email || '',
+        photoUrl: doctorData.photoUrl || '',
+      });
+    } else if (provider) {
+      setEditedData({
+        name: provider.name,
+        specialty: provider.specialty || providerSpecialty,
+        phone: provider.phone || '',
+        email: provider.email || '',
+        photoUrl: '',
+      });
+    }
+  }, [doctorData, provider, providerSpecialty]);
 
   // Load provider details and related data if ID is provided
   useEffect(() => {
@@ -219,6 +258,62 @@ export default function DoctorDetailScreen() {
     }
   };
 
+  const handleEditPress = () => {
+    setIsEditModalVisible(true);
+  };
+
+  const handlePickImage = async () => {
+    try {
+      const imageUri = await pickImage();
+      if (imageUri) {
+        setEditedData({ ...editedData, photoUrl: imageUri });
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await updateDoctor({
+        name: editedData.name,
+        specialty: editedData.specialty,
+        phone: editedData.phone,
+        email: editedData.email,
+        photoUrl: editedData.photoUrl,
+      });
+      setIsEditModalVisible(false);
+      Alert.alert('Success', 'Doctor information updated successfully');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to save doctor information. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    // Reset to original data
+    if (doctorData) {
+      setEditedData({
+        name: doctorData.name,
+        specialty: doctorData.specialty || providerSpecialty,
+        phone: doctorData.phone || '',
+        email: doctorData.email || '',
+        photoUrl: doctorData.photoUrl || '',
+      });
+    } else if (provider) {
+      setEditedData({
+        name: provider.name,
+        specialty: provider.specialty || providerSpecialty,
+        phone: provider.phone || '',
+        email: provider.email || '',
+        photoUrl: '',
+      });
+    }
+    setIsEditModalVisible(false);
+  };
+
   // Treatment plans are loaded from Fasten Health
 
   const doctors = [
@@ -353,17 +448,34 @@ export default function DoctorDetailScreen() {
   );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Doctor Header */}
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <InitialsAvatar name={doctorName} size={getScaledFontSize(120)} style={styles.doctorAvatar} />
-        <Text style={[styles.doctorName, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>{doctorName}</Text>
-        <Text style={[styles.qualifications, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>{doctorQualifications}</Text>
-        {doctorSpecialty && doctorSpecialty !== 'General' && (
-          <Text style={[styles.specialty, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
-            Specialist in {doctorSpecialty}
-          </Text>
-        )}
+    <>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Doctor Header */}
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
+          <View style={styles.avatarContainer}>
+            {doctorData?.photoUrl ? (
+              <Avatar.Image 
+                size={getScaledFontSize(120)} 
+                source={{ uri: doctorData.photoUrl }} 
+                style={styles.doctorAvatar} 
+              />
+            ) : (
+              <InitialsAvatar name={doctorName} size={getScaledFontSize(120)} style={styles.doctorAvatar} />
+            )}
+            <TouchableOpacity 
+              style={[styles.editButton, { backgroundColor: colors.tint }]}
+              onPress={handleEditPress}
+            >
+              <MaterialIcons name="edit" size={getScaledFontSize(20)} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.doctorName, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>{doctorName}</Text>
+          <Text style={[styles.qualifications, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }]}>{doctorQualifications}</Text>
+          {doctorSpecialty && doctorSpecialty !== 'General' && (
+            <Text style={[styles.specialty, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Specialist in {doctorSpecialty}
+            </Text>
+          )}
         
         {/* Communication Options */}
         <View style={styles.communicationContainer}>
@@ -436,6 +548,130 @@ export default function DoctorDetailScreen() {
       {activeTab === 'share' && renderShareData()}
       {activeTab === 'appointments' && renderAppointments()}
     </ScrollView>
+
+    {/* Edit Modal */}
+    <Portal>
+      <Modal
+        visible={isEditModalVisible}
+        onDismiss={handleCancel}
+        contentContainerStyle={[styles.modalContainer, { backgroundColor: colors.background }]}
+      >
+        <ScrollView style={styles.modalContent}>
+          <Text style={[styles.modalTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
+            Edit Doctor Information
+          </Text>
+
+          {/* Profile Picture */}
+          <View style={styles.imageSection}>
+            {editedData.photoUrl ? (
+              <Image source={{ uri: editedData.photoUrl }} style={[styles.previewImage, { width: getScaledFontSize(120), height: getScaledFontSize(120) }]} />
+            ) : (
+              <InitialsAvatar name={editedData.name} size={getScaledFontSize(120)} />
+            )}
+            <Button
+              mode="outlined"
+              onPress={handlePickImage}
+              style={[styles.imageButton, { borderColor: colors.tint }]}
+              labelStyle={{ fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }}
+            >
+              {editedData.photoUrl ? 'Change Photo' : 'Add Photo'}
+            </Button>
+            {editedData.photoUrl && (
+              <Button
+                mode="text"
+                onPress={() => setEditedData({ ...editedData, photoUrl: '' })}
+                style={styles.removeImageButton}
+                labelStyle={{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any, color: '#ff4444' }}
+              >
+                Remove Photo
+              </Button>
+            )}
+          </View>
+
+          {/* Name */}
+          <View style={styles.inputSection}>
+            <Text style={[styles.inputLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Name
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, fontSize: getScaledFontSize(16) }]}
+              value={editedData.name}
+              onChangeText={(text) => setEditedData({ ...editedData, name: text })}
+              placeholder="Doctor name"
+              placeholderTextColor={colors.text + '60'}
+            />
+          </View>
+
+          {/* Specialty */}
+          <View style={styles.inputSection}>
+            <Text style={[styles.inputLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Specialty
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, fontSize: getScaledFontSize(16) }]}
+              value={editedData.specialty}
+              onChangeText={(text) => setEditedData({ ...editedData, specialty: text })}
+              placeholder="Specialty"
+              placeholderTextColor={colors.text + '60'}
+            />
+          </View>
+
+          {/* Phone */}
+          <View style={styles.inputSection}>
+            <Text style={[styles.inputLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Phone
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, fontSize: getScaledFontSize(16) }]}
+              value={editedData.phone}
+              onChangeText={(text) => setEditedData({ ...editedData, phone: text })}
+              placeholder="Phone number"
+              placeholderTextColor={colors.text + '60'}
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          {/* Email */}
+          <View style={styles.inputSection}>
+            <Text style={[styles.inputLabel, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+              Email
+            </Text>
+            <TextInput
+              style={[styles.input, { color: colors.text, borderColor: colors.border, fontSize: getScaledFontSize(16) }]}
+              value={editedData.email}
+              onChangeText={(text) => setEditedData({ ...editedData, email: text })}
+              placeholder="Email address"
+              placeholderTextColor={colors.text + '60'}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.modalActions}>
+            <Button
+              mode="outlined"
+              onPress={handleCancel}
+              style={[styles.modalButton, { borderColor: colors.border }]}
+              labelStyle={{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any }}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSave}
+              loading={isSaving}
+              disabled={isSaving}
+              style={[styles.modalButton, { backgroundColor: colors.tint }]}
+              labelStyle={{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(500) as any, color: '#fff' }}
+            >
+              Save
+            </Button>
+          </View>
+        </ScrollView>
+      </Modal>
+    </Portal>
+    </>
   );
 }
 
@@ -449,8 +685,83 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     marginBottom: 16,
   },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
   doctorAvatar: {
     marginBottom: 16,
+  },
+  editButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalContainer: {
+    margin: 20,
+    borderRadius: 16,
+    maxHeight: '90%',
+  },
+  modalContent: {
+    padding: 24,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  imageSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  previewImage: {
+    borderRadius: 60,
+    marginBottom: 16,
+  },
+  imageButton: {
+    marginTop: 12,
+  },
+  removeImageButton: {
+    marginTop: 8,
+  },
+  inputSection: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
   },
   doctorName: {
     fontSize: 24,

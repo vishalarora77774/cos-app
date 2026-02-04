@@ -29,12 +29,12 @@ export const USE_MOCK_DATA = false;
 export function getFastenHealthDataPath(): string {
   return USE_MOCK_DATA 
     ? '../data/mock-fasten-health-data.json'
-    : '../data/fasten-health-data-2.json';
+    : '../data/fasten-health-data.json';
 }
 
 /**
  * Get the data file name for logging
  */
 export function getFastenHealthDataName(): string {
-  return USE_MOCK_DATA ? 'mock' : 'fasten-health-data-2';
+  return USE_MOCK_DATA ? 'mock' : 'fasten-health-data';
 }

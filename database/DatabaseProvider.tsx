@@ -1,5 +1,6 @@
 import React, { createContext, useContext, ReactNode, useEffect, useState } from 'react';
-import { getDatabase, Database } from './index';
+import { getDatabase } from './index';
+import { Database } from '@nozbe/watermelondb';
 
 interface DatabaseContextType {
   database: Database | null;
@@ -43,6 +44,18 @@ export function useDatabase() {
   }
   if (!context.database) {
     throw new Error('Database is not initialized yet. Check isReady before using.');
+  }
+  return context.database;
+}
+
+/**
+ * Safe version of useDatabase that returns null if database is not ready
+ * Use this when you want to gracefully handle database not being available
+ */
+export function useDatabaseSafe(): Database | null {
+  const context = useContext(DatabaseContext);
+  if (context === undefined) {
+    return null;
   }
   return context.database;
 }

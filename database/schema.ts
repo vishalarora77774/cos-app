@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 1,
+  version: 7, // Incremented to add proxies table
   tables: [
     tableSchema({
       name: 'appointments',
@@ -68,6 +68,8 @@ export const schema = appSchema({
         { name: 'phone', type: 'string', isOptional: true },
         { name: 'email', type: 'string', isOptional: true },
         { name: 'address', type: 'string', isOptional: true },
+        { name: 'photo_url', type: 'string', isOptional: true },
+        { name: 'provider_id', type: 'string', isOptional: true }, // Link to provider ID from Fasten Health
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
         { name: 'synced_at', type: 'number', isOptional: true },
@@ -85,6 +87,103 @@ export const schema = appSchema({
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
         { name: 'synced_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'clinics',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'identifier', type: 'string', isOptional: true },
+        { name: 'address_line', type: 'string', isOptional: true },
+        { name: 'city', type: 'string', isOptional: true },
+        { name: 'state', type: 'string', isOptional: true },
+        { name: 'zip', type: 'string', isOptional: true },
+        { name: 'country', type: 'string', isOptional: true },
+        { name: 'phone', type: 'string', isOptional: true },
+        { name: 'email', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+        { name: 'synced_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'labs',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'identifier', type: 'string', isOptional: true },
+        { name: 'address_line', type: 'string', isOptional: true },
+        { name: 'city', type: 'string', isOptional: true },
+        { name: 'state', type: 'string', isOptional: true },
+        { name: 'zip', type: 'string', isOptional: true },
+        { name: 'country', type: 'string', isOptional: true },
+        { name: 'phone', type: 'string', isOptional: true },
+        { name: 'email', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+        { name: 'synced_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'selected_providers',
+      columns: [
+        { name: 'provider_id', type: 'string' },
+        { name: 'name', type: 'string' },
+        { name: 'qualifications', type: 'string', isOptional: true },
+        { name: 'specialty', type: 'string', isOptional: true },
+        { name: 'photo_url', type: 'string', isOptional: true },
+        { name: 'phone', type: 'string', isOptional: true },
+        { name: 'email', type: 'string', isOptional: true },
+        { name: 'category', type: 'string', isOptional: true },
+        { name: 'sub_category', type: 'string', isOptional: true },
+        { name: 'sub_categories', type: 'string', isOptional: true }, // JSON array as string
+        { name: 'last_visited', type: 'string', isOptional: true },
+        { name: 'is_manual', type: 'boolean' },
+        { name: 'relationship', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'emergency_contacts',
+      columns: [
+        { name: 'name', type: 'string' },
+        { name: 'relationship', type: 'string', isOptional: true },
+        { name: 'phone', type: 'string', isOptional: true },
+        { name: 'email', type: 'string', isOptional: true },
+        { name: 'patient_id', type: 'string', isOptional: true },
+        { name: 'clinic_id', type: 'string', isOptional: true },
+        { name: 'clinic_name', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+        { name: 'synced_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'health_details',
+      columns: [
+        { name: 'height', type: 'string', isOptional: true },
+        { name: 'weight', type: 'string', isOptional: true },
+        { name: 'blood_type', type: 'string', isOptional: true },
+        { name: 'blood_pressure_systolic', type: 'string', isOptional: true },
+        { name: 'blood_pressure_diastolic', type: 'string', isOptional: true },
+        { name: 'uses_cpap', type: 'boolean' },
+        { name: 'chronic_conditions', type: 'string', isOptional: true }, // JSON array as string
+        { name: 'patient_id', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+        { name: 'synced_at', type: 'number', isOptional: true },
+      ],
+    }),
+    tableSchema({
+      name: 'proxies',
+      columns: [
+        { name: 'email', type: 'string' },
+        { name: 'status', type: 'string' }, // 'pending', 'active', 'revoked'
+        { name: 'consent_given', type: 'boolean' },
+        { name: 'consent_date', type: 'string', isOptional: true },
+        { name: 'patient_id', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
       ],
     }),
   ],

@@ -31,6 +31,8 @@ interface ProfileContentProps {
   showSignOut?: boolean;
   showConnectedEhrButton?: boolean;
   onConnectedEhrPress?: () => void;
+  onEmergencyContactPress?: () => void;
+  onHealthDetailsPress?: () => void;
   showEhrTitle?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
 }
@@ -46,6 +48,8 @@ export function ProfileContent({
   showSignOut = true,
   showConnectedEhrButton = false,
   onConnectedEhrPress,
+  onEmergencyContactPress,
+  onHealthDetailsPress,
   showEhrTitle = true,
   containerStyle,
 }: ProfileContentProps) {
@@ -105,31 +109,39 @@ export function ProfileContent({
 
           <Card style={styles.menuCard}>
             <List.Item
-              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Medical History</Text>}
-              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>View and manage your records</Text>}
+              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Health Details</Text>}
+              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>View and manage your health information</Text>}
               left={(props) => <Icon {...props} source="medical-bag" size={getScaledFontSize(40)} />}
               right={(props) => <Icon {...props} source="chevron-right" size={getScaledFontSize(40)} />}
-              onPress={() => {}}
+              onPress={() => {
+                if (onHealthDetailsPress) {
+                  onHealthDetailsPress();
+                }
+              }}
             />
           </Card>
 
           <Card style={styles.menuCard}>
             <List.Item
-              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Insurance Information</Text>}
-              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Manage your coverage details</Text>}
-              left={(props) => <Icon {...props} source="card-account-details" size={getScaledFontSize(40)} />}
+              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Proxy Management</Text>}
+              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Manage your proxy access</Text>}
+              left={(props) => <Icon {...props} source="account-supervisor" size={getScaledFontSize(40)} />}
               right={(props) => <Icon {...props} source="chevron-right" size={getScaledFontSize(40)} />}
-              onPress={() => {}}
+              onPress={() => router.push('/(proxy-management)')}
             />
           </Card>
 
           <Card style={styles.menuCard}>
             <List.Item
-              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Emergency Contacts</Text>}
-              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Manage your emergency contacts</Text>}
+              title={<Text style={[{ fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(600) as any }]}>Emergency Contact</Text>}
+              description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Manage your emergency contact</Text>}
               left={(props) => <Icon {...props} source="account-group" size={getScaledFontSize(40)} />}
               right={(props) => <Icon {...props} source="chevron-right" size={getScaledFontSize(40)} />}
-              onPress={() => {}}
+              onPress={() => {
+                if (onEmergencyContactPress) {
+                  onEmergencyContactPress();
+                }
+              }}
             />
           </Card>
 

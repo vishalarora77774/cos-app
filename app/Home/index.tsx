@@ -10,8 +10,10 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Avatar, Button, Card, List, Menu, TextInput as PaperTextInput } from 'react-native-paper';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { getFastenPractitioners, getFastenPractitionersByDepartment, Provider as FastenProvider, getFastenPatient, transformFastenHealthData, Appointment as FastenAppointment } from '@/services/fasten-health';
 import { InitialsAvatar } from '@/utils/avatar-utils';
+import { getAllCareManagerAgencies, searchCareManagerAgencies, type CareManagerAgency } from '@/services/care-manager-agencies';
 
 // Helper function to detect if device is a tablet
 const isTablet = () => {
@@ -634,6 +636,9 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
   const [manualEmail, setManualEmail] = useState('');
   const [manualSubCategoryId, setManualSubCategoryId] = useState<string | null>(null);
   const [isSubCategoryMenuVisible, setIsSubCategoryMenuVisible] = useState(false);
+  const [subCategorySearchQuery, setSubCategorySearchQuery] = useState('');
+  const [providerSearchQuery, setProviderSearchQuery] = useState('');
+  const [agencySearchQuery, setAgencySearchQuery] = useState('');
 
   const addManualMember = (categoryId: string, fallbackSubCategoryId?: string) => {
     const targetSubCategoryId = manualSubCategoryId || fallbackSubCategoryId;
@@ -759,22 +764,40 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
 
   const handleCategoryPress = (categoryId: string) => {
     setSelectedCategoryId(categoryId);
-    setCurrentLevel('sub-categories');
+    // Care Manager category has no subcategories, go directly to providers (agencies)
+    if (categoryId === 'care-manager') {
+      setCurrentLevel('providers');
+      setAgencySearchQuery(''); // Reset search when navigating to agencies
+    } else {
+      setCurrentLevel('sub-categories');
+      setSubCategorySearchQuery(''); // Reset search when navigating to subcategories
+    }
   };
 
   const handleSubCategoryPress = (categoryId: string, subCategoryId: string) => {
     setSelectedSubCategoryId(subCategoryId);
     setCurrentLevel('providers');
+    setProviderSearchQuery(''); // Reset search when navigating to providers
     onItemPress(categoryId, subCategoryId);
   };
 
   const handleBack = () => {
     if (currentLevel === 'providers') {
-      setCurrentLevel('sub-categories');
-      setSelectedSubCategoryId(undefined);
+      // Care Manager category has no subcategories, so go directly back to categories
+      if (selectedCategoryId === 'care-manager') {
+        setCurrentLevel('categories');
+        setSelectedCategoryId(undefined);
+        setAgencySearchQuery(''); // Reset agency search when going back
+      } else {
+        setCurrentLevel('sub-categories');
+        setSelectedSubCategoryId(undefined);
+        setProviderSearchQuery(''); // Reset provider search when going back
+      }
     } else if (currentLevel === 'sub-categories') {
       setCurrentLevel('categories');
       setSelectedCategoryId(undefined);
+      setSubCategorySearchQuery(''); // Reset subcategory search when going back
+      setAgencySearchQuery(''); // Reset agency search when going back
     }
   };
 
@@ -885,7 +908,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
                 justifyContent: 'center',
               }
             ]}>
-              <IconSymbol name="building.2" size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
+              <IconSymbol name={category.icon || 'circle.fill'} size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
             </View>
             <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
               <Text style={[
@@ -921,6 +944,8 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
     if (!selectedCategoryId) return null;
     const category = getCategoryById(selectedCategoryId);
     if (!category) return null;
+    // Care Manager category has no subcategories, should not render this view
+    if (category.id === 'care-manager') return null;
     const isNonMedicalCategory = category.id !== 'medical';
     const subCategoriesWithData = category.subCategories.filter(subCategory => {
       const key = `${category.id}-${subCategory.id}`;
@@ -928,7 +953,14 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
       const manualMembers = manualMembersBySubCategory[key] || [];
       return providers.length + manualMembers.length > 0;
     });
-    const subCategoriesToShow = isNonMedicalCategory ? subCategoriesWithData : category.subCategories;
+    let subCategoriesToShow = isNonMedicalCategory ? subCategoriesWithData : category.subCategories;
+    // Filter subcategories based on search query
+    if (subCategorySearchQuery.trim()) {
+      const query = subCategorySearchQuery.toLowerCase().trim();
+      subCategoriesToShow = subCategoriesToShow.filter(subCategory => 
+        subCategory.name.toLowerCase().includes(query)
+      );
+    }
     const showEmptyNonMedical = isNonMedicalCategory && subCategoriesWithData.length === 0;
     const manualSubCategoryLabel = manualSubCategoryId
       ? category.subCategories.find(sub => sub.id === manualSubCategoryId)?.name
@@ -976,6 +1008,18 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
               accessibilityLabel="Filter providers by last visited"
             />
           </View>
+        </View>
+        <View style={{ paddingHorizontal: getScaledFontSize(16), paddingBottom: getScaledFontSize(12) }}>
+          <PaperTextInput
+            label="Search subcategories"
+            value={subCategorySearchQuery}
+            onChangeText={setSubCategorySearchQuery}
+            mode="outlined"
+            left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+            style={{ backgroundColor: colors.background }}
+            textColor={colors.text}
+            activeOutlineColor={colors.tint}
+          />
         </View>
         {showEmptyNonMedical ? (
           <View style={[
@@ -1113,7 +1157,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
                   justifyContent: 'center',
                 }
               ]}>
-                <IconSymbol name="person.2" size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
+                <IconSymbol name={subCategory.icon || 'circle.fill'} size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
               </View>
               <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
                 <Text style={[
@@ -1147,8 +1191,142 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
   };
 
   const renderProviders = () => {
-    const providers = getCurrentProviders();
     const category = selectedCategoryId ? getCategoryById(selectedCategoryId) : undefined;
+    
+    // Handle Care Manager category specially - show agencies
+    if (selectedCategoryId === 'care-manager') {
+      let agencies = getAllCareManagerAgencies();
+      
+      // Filter agencies based on search query
+      if (agencySearchQuery.trim()) {
+        agencies = searchCareManagerAgencies(agencySearchQuery);
+      }
+      
+      return (
+        <>
+          <View style={[
+            styles.detailsListHeader,
+            {
+              borderBottomColor: colors.text + '20',
+              paddingHorizontal: getScaledFontSize(16),
+              paddingVertical: getScaledFontSize(12),
+              marginBottom: getScaledFontSize(8),
+            }
+          ]}>
+            <TouchableOpacity onPress={handleBack} style={{ padding: getScaledFontSize(4) }}>
+              <IconSymbol name="chevron.right" size={getScaledFontSize(24)} color={colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
+            </TouchableOpacity>
+            <Text style={[
+              styles.detailsListTitle,
+              {
+                fontSize: getScaledFontSize(18),
+                fontWeight: getScaledFontWeight(600) as any,
+                color: colors.text,
+                flex: 1,
+                marginLeft: getScaledFontSize(8),
+              }
+            ]}>
+              Care Manager Agencies
+            </Text>
+            <View style={{ width: getScaledFontSize(24) }} />
+          </View>
+          <View style={{ paddingHorizontal: getScaledFontSize(16), paddingBottom: getScaledFontSize(12) }}>
+            <PaperTextInput
+              label="Search agencies"
+              value={agencySearchQuery}
+              onChangeText={setAgencySearchQuery}
+              mode="outlined"
+              left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+              style={{ backgroundColor: colors.background }}
+              textColor={colors.text}
+              activeOutlineColor={colors.tint}
+            />
+          </View>
+          {agencies.length === 0 ? (
+            <View style={[styles.listItem, { paddingVertical: getScaledFontSize(16), paddingHorizontal: getScaledFontSize(16) }]}>
+              <Text style={[
+                {
+                  fontSize: getScaledFontSize(14),
+                  color: colors.text + '80',
+                }
+              ]}>No agencies found</Text>
+            </View>
+          ) : (
+            agencies.map((agency) => (
+              <TouchableOpacity
+                key={agency.id}
+                style={[
+                  styles.listItem,
+                  {
+                    borderBottomColor: colors.text + '20',
+                    paddingVertical: getScaledFontSize(16),
+                    paddingHorizontal: getScaledFontSize(16),
+                  }
+                ]}
+                onPress={() => {
+                  router.push(`/(care-manager-detail)?id=${encodeURIComponent(agency.id)}&name=${encodeURIComponent(agency.name)}`);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[
+                  styles.listAvatar,
+                  {
+                    width: getScaledFontSize(56),
+                    height: getScaledFontSize(56),
+                    borderRadius: getScaledFontSize(28),
+                    backgroundColor: colors.tint + '20',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }
+                ]}>
+                  <IconSymbol name="building.2" size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
+                </View>
+                <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
+                  <Text style={[
+                    styles.listItemName,
+                    {
+                      fontSize: getScaledFontSize(16),
+                      fontWeight: getScaledFontWeight(600) as any,
+                      color: colors.text,
+                      marginBottom: getScaledFontSize(4),
+                    }
+                  ]}>
+                    {agency.name}
+                  </Text>
+                  <Text style={[
+                    styles.listItemRole,
+                    {
+                      fontSize: getScaledFontSize(14),
+                      fontWeight: getScaledFontWeight(400) as any,
+                      color: colors.text + '80',
+                    }
+                  ]} numberOfLines={2}>
+                    {agency.description}
+                  </Text>
+                  {agency.city && agency.state && (
+                    <Text style={[
+                      styles.listItemRole,
+                      {
+                        fontSize: getScaledFontSize(12),
+                        fontWeight: getScaledFontWeight(400) as any,
+                        color: colors.text + '60',
+                        marginTop: getScaledFontSize(4),
+                      }
+                    ]}>
+                      {agency.city}, {agency.state}
+                    </Text>
+                  )}
+                </View>
+                <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
+              </TouchableOpacity>
+            ))
+          )}
+        </>
+      );
+    }
+    
+    // Regular providers rendering for other categories
+    let providers = getCurrentProviders();
     const subCategory = selectedCategoryId && selectedSubCategoryId 
       ? getSubCategoryById(selectedCategoryId, selectedSubCategoryId) 
       : undefined;
@@ -1160,6 +1338,18 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
     const manualSubCategoryLabel = manualSubCategoryId
       ? availableSubCategories.find(sub => sub.id === manualSubCategoryId)?.name
       : undefined;
+
+    // Filter providers based on search query
+    let filteredProviders = providers;
+    if (providerSearchQuery.trim()) {
+      const query = providerSearchQuery.toLowerCase().trim();
+      filteredProviders = providers.filter(provider => 
+        provider.name.toLowerCase().includes(query) ||
+        (provider.qualifications && provider.qualifications.toLowerCase().includes(query)) ||
+        (provider.specialty && provider.specialty.toLowerCase().includes(query)) ||
+        (provider.relationship && provider.relationship.toLowerCase().includes(query))
+      );
+    }
 
     return (
       <>
@@ -1197,6 +1387,18 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
           ) : (
             <View style={{ width: getScaledFontSize(24) }} />
           )}
+        </View>
+        <View style={{ paddingHorizontal: getScaledFontSize(16), paddingBottom: getScaledFontSize(12) }}>
+          <PaperTextInput
+            label="Search providers"
+            value={providerSearchQuery}
+            onChangeText={setProviderSearchQuery}
+            mode="outlined"
+            left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+            style={{ backgroundColor: colors.background }}
+            textColor={colors.text}
+            activeOutlineColor={colors.tint}
+          />
         </View>
         {canAddMember && (
           <View style={[
@@ -1306,7 +1508,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
               }
             ]}>Loading providers...</Text>
           </View>
-        ) : providers.length === 0 ? (
+        ) : filteredProviders.length === 0 ? (
           <View style={[styles.listItem, { paddingVertical: getScaledFontSize(16), paddingHorizontal: getScaledFontSize(16) }]}>
             <Text style={[
               {
@@ -1316,7 +1518,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
             ]}>No providers found</Text>
           </View>
         ) : (
-          providers.map((provider) => {
+          filteredProviders.map((provider) => {
             const isSelected = selectedProviderIds.has(String(provider.id));
             const isCircleFull = selectedProviderIds.size >= maxCircleProviders;
             const canAdd = !isSelected && !isCircleFull;
@@ -1639,7 +1841,7 @@ export default function HomeScreen() {
   // Load Fasten Health providers for circle view
   const [fastenProviders, setFastenProviders] = useState<FastenProvider[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
-  const { selectedProviders, addProvider, removeProvider } = useProviderSelection();
+  const { selectedProviders, addProvider, removeProvider, validateAndCleanProviders } = useProviderSelection();
   const [patientName, setPatientName] = useState('Jenny Wilson');
   const [upcomingAppointments, setUpcomingAppointments] = useState<FastenAppointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
@@ -1668,6 +1870,9 @@ export default function HomeScreen() {
         const providers = await getFastenPractitioners();
         setFastenProviders(providers);
         console.log(`Loaded ${providers.length} providers from Fasten Health for home screen`);
+        
+        // Validate and clean selected providers when data changes
+        await validateAndCleanProviders();
       } catch (error) {
         console.error('Error loading Fasten Health providers:', error);
       } finally {
@@ -1689,7 +1894,7 @@ export default function HomeScreen() {
     
     loadProviders();
     loadPatient();
-  }, []);
+  }, [validateAndCleanProviders]);
 
   useEffect(() => {
     const loadUpcomingAppointments = async () => {
