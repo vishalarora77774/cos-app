@@ -15,7 +15,8 @@
       "associatedDomains": [
         "applinks:joinabrightfuture.com",
         "applinks:*.joinabrightfuture.com"
-      ]
+      ],
+      "appleTeamId": "74MH6L4MZA"
     },
     "android": {
       "adaptiveIcon": {
@@ -46,6 +47,9 @@
             "DEFAULT"
           ]
         }
+      ],
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -66,13 +70,7 @@
           }
         }
       ],
-      "expo-sqlite",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "The app needs access to your photos to set doctor profile pictures."
-        }
-      ]
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

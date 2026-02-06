@@ -269,7 +269,31 @@ export default function DoctorDetailScreen() {
         setEditedData({ ...editedData, photoUrl: imageUri });
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to pick image. Please try again.';
+      console.error('Error in handlePickImage:', error);
+      
+      // Show more helpful error message
+      Alert.alert(
+        'Error',
+        errorMessage,
+        [
+          {
+            text: 'OK',
+            style: 'default',
+          },
+          // If permission was denied, offer to open settings
+          ...(errorMessage.includes('denied') || errorMessage.includes('Settings')
+            ? [
+                {
+                  text: 'Open Settings',
+                  onPress: () => {
+                    Linking.openSettings();
+                  },
+                },
+              ]
+            : []),
+        ]
+      );
     }
   };
 

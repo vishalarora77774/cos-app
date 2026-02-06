@@ -14,6 +14,7 @@ import { SUPPORT_CATEGORIES, getCategoryById, matchProviderToSubCategory } from 
 import { getAllCareManagerAgencies, searchCareManagerAgencies, type CareManagerAgency } from '@/services/care-manager-agencies';
 import { FilterMenu } from '@/components/ui/filter-menu';
 import { MAX_SELECTED_PROVIDERS, useProviderSelection, type SelectedProvider } from '@/stores/provider-selection-store';
+import { useDoctorPhotos } from '@/hooks/use-doctor-photo';
 
 
 interface CategoryGroup {
@@ -59,6 +60,24 @@ export default function ModalScreen() {
   const [isSubCategoryMenuVisible, setIsSubCategoryMenuVisible] = React.useState(false);
   const [providerSearchQuery, setProviderSearchQuery] = React.useState('');
   const [agencySearchQuery, setAgencySearchQuery] = React.useState('');
+
+  // Collect all provider IDs from category groups to load photos
+  const allProviderIds = React.useMemo(() => {
+    const ids: string[] = [];
+    categoryGroups.forEach(category => {
+      category.subCategories?.forEach(subCategory => {
+        subCategory.doctors.forEach(doctor => {
+          if (doctor.id && !ids.includes(doctor.id)) {
+            ids.push(doctor.id);
+          }
+        });
+      });
+    });
+    return ids;
+  }, [categoryGroups]);
+
+  // Load doctor photos for all providers
+  const doctorPhotos = useDoctorPhotos(allProviderIds);
 
   const lastVisitedFilters = [
     { id: '3m', label: 'Last 3 months', months: 3 },
@@ -718,7 +737,7 @@ export default function ModalScreen() {
                                   qualifications={provider.isManual
                                     ? (provider.relationship || provider.qualifications || 'Member')
                                     : (provider.qualifications || 'Healthcare Provider')}
-                                  image={provider.image || undefined}
+                                  image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                                   onPress={provider.isManual ? undefined : () => {
                                     router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
                                   }}
@@ -785,7 +804,7 @@ export default function ModalScreen() {
                           id={provider.id}
                           name={provider.name}
                           qualifications={provider.qualifications || 'Healthcare Provider'}
-                          image={provider.image || undefined}
+                          image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                           onPress={() => {
                             router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
                           }}

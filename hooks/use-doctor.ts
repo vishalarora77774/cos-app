@@ -2,14 +2,28 @@ import { useCallback, useEffect, useState } from 'react';
 import { getDatabase } from '@/database';
 import { Doctor } from '@/database/models';
 import { Q } from '@nozbe/watermelondb';
+import { Platform, PermissionsAndroid } from 'react-native';
 
-// Dynamic import to prevent errors if native module isn't available
+// Use react-native-image-picker as alternative to expo-image-picker
+// This library is more reliable and doesn't depend on Expo's module system
+let ImagePicker: any = null;
+
 const loadImagePicker = async () => {
+  if (ImagePicker) return ImagePicker;
+  
   try {
-    const ImagePicker = await import('expo-image-picker');
-    return ImagePicker.default || ImagePicker;
+    // Dynamic import - only loads when needed
+    const ImagePickerModule = await import('react-native-image-picker');
+    ImagePicker = ImagePickerModule.default || ImagePickerModule;
+    
+    if (!ImagePicker || typeof ImagePicker.launchImageLibrary !== 'function') {
+      console.error('❌ react-native-image-picker module loaded but API not available');
+      return null;
+    }
+    
+    return ImagePicker;
   } catch (error) {
-    console.warn('expo-image-picker not available:', error);
+    console.error('❌ Failed to load react-native-image-picker:', error);
     return null;
   }
 };
@@ -131,33 +145,79 @@ export function useDoctor(providerId: string) {
 
   const pickImage = useCallback(async (): Promise<string | null> => {
     try {
-      // Lazy load ImagePicker
-      const ImagePicker = await loadImagePicker();
-      if (!ImagePicker) {
-        throw new Error('Image picker is not available. Please rebuild the app: npx expo run:ios');
+      console.log('📸 Starting image picker...');
+      
+      // Get ImagePicker instance (lazy load)
+      const picker = await loadImagePicker();
+      
+      if (!picker) {
+        console.error('❌ ImagePicker module is null - native module not linked');
+        throw new Error(
+          'Image picker native module is not available. ' +
+          'Please install: npm install react-native-image-picker && cd ios && pod install && cd .. && npx expo run:ios --device'
+        );
       }
 
-      // Request permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        throw new Error('Permission to access media library is required');
+      console.log('✅ ImagePicker module loaded');
+
+      // Request permissions (iOS handles this automatically, Android needs explicit request)
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+          {
+            title: 'Photo Library Permission',
+            message: 'The app needs access to your photos to set doctor profile pictures.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          throw new Error('Permission to access media library was denied');
+        }
       }
 
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+      console.log('✅ Permissions granted, launching image picker...');
+
+      // Launch image picker using react-native-image-picker API
+      return new Promise((resolve, reject) => {
+        const options = {
+          mediaType: 'photo' as const,
+          includeBase64: false,
+          maxHeight: 2000,
+          maxWidth: 2000,
+          quality: 0.8,
+          selectionLimit: 1,
+        };
+
+        picker.launchImageLibrary(options, (response: any) => {
+          console.log('📸 Image picker response:', {
+            didCancel: response.didCancel,
+            errorMessage: response.errorMessage,
+            hasUri: !!response.assets?.[0]?.uri,
+          });
+
+          if (response.didCancel) {
+            console.log('ℹ️ User canceled image selection');
+            resolve(null);
+          } else if (response.errorMessage) {
+            console.error('❌ Image picker error:', response.errorMessage);
+            reject(new Error(response.errorMessage));
+          } else if (response.assets && response.assets.length > 0) {
+            const uri = response.assets[0].uri;
+            console.log('✅ Image selected:', uri);
+            resolve(uri || null);
+          } else {
+            console.log('ℹ️ No image selected');
+            resolve(null);
+          }
+        });
       });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        return result.assets[0].uri;
-      }
-      return null;
     } catch (err) {
       console.error('❌ Error picking image:', err);
-      throw err;
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      throw new Error(`Failed to pick image: ${errorMessage}`);
     }
   }, []);
 

@@ -14,6 +14,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { getFastenPractitioners, getFastenPractitionersByDepartment, Provider as FastenProvider, getFastenPatient, transformFastenHealthData, Appointment as FastenAppointment } from '@/services/fasten-health';
 import { InitialsAvatar } from '@/utils/avatar-utils';
 import { getAllCareManagerAgencies, searchCareManagerAgencies, type CareManagerAgency } from '@/services/care-manager-agencies';
+import { useDoctorPhotos } from '@/hooks/use-doctor-photo';
 
 // Helper function to detect if device is a tablet
 const isTablet = () => {
@@ -76,6 +77,10 @@ interface CircleViewProps {
 
 // Original Circle View for iPhone/Android (fixed dimensions)
 function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', onAddProviderPress, isCircleComplete }: CircleViewProps) {
+  // Load doctor photos for all providers
+  const providerIds = providers.map(p => p.id);
+  const doctorPhotos = useDoctorPhotos(providerIds);
+  
   // Original fixed values
   const containerWidth = 384;
   const containerHeight = 320;
@@ -114,7 +119,20 @@ function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getSca
         }} />
       <View style={styles.centerAvatarWrapper}>
         <TouchableOpacity 
-          onPress={() => router.push('/Home/today-schedule')}
+          onPress={() => {
+            try {
+              console.log('Navigating to today-schedule...');
+              router.push('/Home/today-schedule');
+            } catch (error) {
+              console.error('Error navigating to today-schedule:', error);
+              // Fallback navigation
+              try {
+                router.push('/(Home)/today-schedule');
+              } catch (fallbackError) {
+                console.error('Fallback navigation also failed:', fallbackError);
+              }
+            }
+          }}
           activeOpacity={0.8}
         >
           <InitialsAvatar name={patientName} size={getScaledFontSize(centerAvatarSize)} style={styles.centerAvatarImage} />
@@ -190,6 +208,7 @@ function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getSca
                   <InitialsAvatar
                     name={item.name}
                     size={getScaledFontSize(avatarSize)}
+                    image={doctorPhotos.get(item.id) ? { uri: doctorPhotos.get(item.id)! } : undefined}
                   />
                   <Text 
                     numberOfLines={2}
@@ -217,6 +236,9 @@ function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getSca
 
 // Responsive Circle View for iPad/Tablet
 function TabletCircleView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', onAddProviderPress, isCircleComplete }: CircleViewProps) {
+  // Load doctor photos for all providers
+  const providerIds = providers.map(p => p.id);
+  const doctorPhotos = useDoctorPhotos(providerIds);
   // Get screen dimensions and calculate scale factor
   const screenWidth = Dimensions.get('window').width;
   // Horizontal padding from circleSection (24 on each side = 48 total)
@@ -300,7 +322,20 @@ function TabletCircleView({ providers, userImg, colors, getScaledFontSize, getSc
         }} />
       <View style={styles.centerAvatarWrapper}>
         <TouchableOpacity 
-          onPress={() => router.push('/Home/today-schedule')}
+          onPress={() => {
+            try {
+              console.log('Navigating to today-schedule...');
+              router.push('/Home/today-schedule');
+            } catch (error) {
+              console.error('Error navigating to today-schedule:', error);
+              // Fallback navigation
+              try {
+                router.push('/(Home)/today-schedule');
+              } catch (fallbackError) {
+                console.error('Fallback navigation also failed:', fallbackError);
+              }
+            }
+          }}
           activeOpacity={0.8}
         >
           <InitialsAvatar name={patientName} size={getScaledFontSize(centerAvatarSize)} style={styles.centerAvatarImage} />
@@ -388,6 +423,7 @@ function TabletCircleView({ providers, userImg, colors, getScaledFontSize, getSc
                   <InitialsAvatar
                     name={item.name}
                     size={getScaledFontSize(avatarSize)}
+                    image={doctorPhotos.get(item.id) ? { uri: doctorPhotos.get(item.id)! } : undefined}
                   />
                   <Text 
                     style={[
@@ -460,6 +496,10 @@ interface CircleProvidersListViewProps {
 }
 
 function CircleProvidersListView({ providers, userImg, colors, getScaledFontSize, getScaledFontWeight, patientName = 'Jenny Wilson', hasUpcomingAppointments, isCircleComplete }: CircleProvidersListViewProps) {
+  // Load doctor photos for all providers
+  const providerIds = providers.map(p => p.id);
+  const doctorPhotos = useDoctorPhotos(providerIds);
+  
   // Calculate max height to push appointments to bottom of screen
   const screenHeight = Dimensions.get('window').height;
   const maxListHeight = hasUpcomingAppointments ? Math.min(screenHeight * 0.65, 600) : undefined;
@@ -542,7 +582,8 @@ function CircleProvidersListView({ providers, userImg, colors, getScaledFontSize
               <InitialsAvatar 
                 name={provider.name} 
                 size={getScaledFontSize(56)} 
-                style={styles.listAvatar} 
+                style={styles.listAvatar}
+                image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : undefined}
               />
               <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
                 <Text style={[
@@ -630,6 +671,22 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
   const [lastVisitedFilter, setLastVisitedFilter] = useState<string | null>(null);
   const [manualMembersBySubCategory, setManualMembersBySubCategory] = useState<Record<string, ManualMember[]>>({});
   const [showAddMemberForm, setShowAddMemberForm] = useState(false);
+  
+  // Collect all provider IDs from all subcategories to load photos
+  const allProviderIds = React.useMemo(() => {
+    const ids: string[] = [];
+    providersBySubCategory.forEach((providers) => {
+      providers.forEach(provider => {
+        if (provider.id && !ids.includes(provider.id)) {
+          ids.push(provider.id);
+        }
+      });
+    });
+    return ids;
+  }, [providersBySubCategory]);
+  
+  // Load doctor photos for all providers
+  const doctorPhotos = useDoctorPhotos(allProviderIds);
   const [manualName, setManualName] = useState('');
   const [manualRelationship, setManualRelationship] = useState('');
   const [manualPhone, setManualPhone] = useState('');
@@ -1541,9 +1598,10 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
               activeOpacity={provider.isManual ? 1 : 0.7}
             >
               <InitialsAvatar 
-                name={provider.name}
+                name={provider.name} 
                 size={getScaledFontSize(56)} 
-                style={styles.listAvatar} 
+                style={styles.listAvatar}
+                image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : undefined}
               />
               <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
                 <Text style={[
@@ -1639,6 +1697,10 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
   
   const [fastenProviders, setFastenProviders] = useState<FastenProvider[]>([]);
   const [isLoadingProviders, setIsLoadingProviders] = useState(false);
+  
+  // Load doctor photos for all providers in the list
+  const providerIds = fastenProviders.map(p => p.id);
+  const doctorPhotos = useDoctorPhotos(providerIds);
   
   // Load Fasten Health providers
   React.useEffect(() => {
@@ -1799,7 +1861,8 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
             <InitialsAvatar 
               name={doc.name}
               size={getScaledFontSize(56)} 
-              style={styles.listAvatar} 
+              style={styles.listAvatar}
+              image={doctorPhotos.get(doc.id) ? { uri: doctorPhotos.get(doc.id)! } : undefined}
             />
             <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16) }]}>
               <Text style={[
