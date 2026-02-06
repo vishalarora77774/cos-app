@@ -6,12 +6,15 @@ import { router } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Menu, Portal, Text, TextInput as PaperTextInput } from 'react-native-paper';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Tabs, TabScreen, TabsProvider } from 'react-native-paper-tabs';
 import { getFastenPractitioners, Provider } from '@/services/fasten-health';
 import { getAllCategories, getAllMedicalSubcategories, groupProvidersByCategory, getProvidersByCategory, getProvidersByMedicalSubcategory } from '@/services/provider-categorization';
 import { SUPPORT_CATEGORIES, getCategoryById, matchProviderToSubCategory } from '@/constants/categories';
+import { getAllCareManagerAgencies, searchCareManagerAgencies, type CareManagerAgency } from '@/services/care-manager-agencies';
 import { FilterMenu } from '@/components/ui/filter-menu';
 import { MAX_SELECTED_PROVIDERS, useProviderSelection, type SelectedProvider } from '@/stores/provider-selection-store';
+import { useDoctorPhotos } from '@/hooks/use-doctor-photo';
 
 
 interface CategoryGroup {
@@ -19,12 +22,14 @@ interface CategoryGroup {
   name: string;
   doctors: Provider[];
   subCategories?: SubCategoryGroup[];
+  icon?: string;
 }
 
 interface SubCategoryGroup {
   id: string;
   name: string;
   doctors: Provider[];
+  icon?: string;
 }
 
 type ManualMember = {
@@ -53,6 +58,26 @@ export default function ModalScreen() {
   const [manualEmail, setManualEmail] = React.useState('');
   const [manualSubCategoryId, setManualSubCategoryId] = React.useState<string | null>(null);
   const [isSubCategoryMenuVisible, setIsSubCategoryMenuVisible] = React.useState(false);
+  const [providerSearchQuery, setProviderSearchQuery] = React.useState('');
+  const [agencySearchQuery, setAgencySearchQuery] = React.useState('');
+
+  // Collect all provider IDs from category groups to load photos
+  const allProviderIds = React.useMemo(() => {
+    const ids: string[] = [];
+    categoryGroups.forEach(category => {
+      category.subCategories?.forEach(subCategory => {
+        subCategory.doctors.forEach(doctor => {
+          if (doctor.id && !ids.includes(doctor.id)) {
+            ids.push(doctor.id);
+          }
+        });
+      });
+    });
+    return ids;
+  }, [categoryGroups]);
+
+  // Load doctor photos for all providers
+  const doctorPhotos = useDoctorPhotos(allProviderIds);
 
   const lastVisitedFilters = [
     { id: '3m', label: 'Last 3 months', months: 3 },
@@ -186,6 +211,7 @@ export default function ModalScreen() {
               id: subCatDef.id,
               name: subCatDef.name,
               doctors: providers,
+              icon: subCatDef.icon,
             };
           });
 
@@ -194,6 +220,7 @@ export default function ModalScreen() {
             name: categoryDef.name,
             doctors: [],
             subCategories,
+            icon: categoryDef.icon,
           };
         });
         
@@ -234,7 +261,7 @@ export default function ModalScreen() {
             fontSize: getScaledFontSize(20), 
             fontWeight: getScaledFontWeight(600) as any, 
             color: colors.text 
-          }]}>Doctors</Text>
+          }]}>SUPPORTS</Text>
           <View style={styles.headerActionsRight}>
             <TouchableOpacity onPress={closeModal} style={styles.headerAction}>
               <IconSymbol name="xmark" size={getScaledFontSize(24)} color={colors.text} />
@@ -263,6 +290,8 @@ export default function ModalScreen() {
             setSelectedCategoryId(null);
             setOpenManualFormKey(null);
             setManualSubCategoryId(null);
+            setProviderSearchQuery(''); // Reset search when switching categories
+            setAgencySearchQuery(''); // Reset agency search when switching categories
           }}
         >
           <Tabs
@@ -302,6 +331,124 @@ export default function ModalScreen() {
                 ? subCategories.find(sub => sub.id === manualSubCategoryId)?.name
                 : undefined;
 
+              // Handle Care Manager category specially - show agencies directly
+              if (category.id === 'care-manager') {
+                let agencies = getAllCareManagerAgencies();
+                
+                // Filter agencies based on search query
+                if (agencySearchQuery.trim()) {
+                  agencies = searchCareManagerAgencies(agencySearchQuery);
+                }
+                
+                return (
+                  <TabScreen
+                    key={category.id}
+                    label={category.name}
+                  >
+                    <ScrollView contentContainerStyle={styles.cardsContainer}>
+                      <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                        <PaperTextInput
+                          label="Search agencies"
+                          value={agencySearchQuery}
+                          onChangeText={setAgencySearchQuery}
+                          mode="outlined"
+                          left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+                          style={{ backgroundColor: colors.background }}
+                          textColor={colors.text}
+                          activeOutlineColor={colors.tint}
+                        />
+                      </View>
+                      {agencies.length === 0 ? (
+                        <View style={styles.emptyDepartmentContainer}>
+                          <Text style={[
+                            styles.emptyText,
+                            {
+                              color: colors.text,
+                              fontSize: getScaledFontSize(14),
+                              fontWeight: getScaledFontWeight(500) as any,
+                            }
+                          ]}>
+                            No agencies found
+                          </Text>
+                        </View>
+                      ) : (
+                        agencies.map((agency) => (
+                          <TouchableOpacity
+                            key={agency.id}
+                            style={[
+                              styles.listItem,
+                              {
+                                borderBottomColor: colors.text + '20',
+                                paddingVertical: getScaledFontSize(16),
+                                paddingHorizontal: getScaledFontSize(16),
+                                marginBottom: getScaledFontSize(12),
+                                borderRadius: getScaledFontSize(12),
+                                backgroundColor: colors.background,
+                              }
+                            ]}
+                            onPress={() => {
+                              router.push(`/(care-manager-detail)?id=${encodeURIComponent(agency.id)}&name=${encodeURIComponent(agency.name)}`);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[
+                              styles.listAvatar,
+                              {
+                                width: getScaledFontSize(56),
+                                height: getScaledFontSize(56),
+                                borderRadius: getScaledFontSize(28),
+                                backgroundColor: colors.tint + '20',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }
+                            ]}>
+                              <IconSymbol name={(category.icon as any) || 'building.2'} size={getScaledFontSize(28)} color={colors.tint || '#008080'} />
+                            </View>
+                            <View style={[styles.listItemContent, { marginLeft: getScaledFontSize(16), flex: 1 }]}>
+                              <Text style={[
+                                styles.listItemName,
+                                {
+                                  fontSize: getScaledFontSize(16),
+                                  fontWeight: getScaledFontWeight(600) as any,
+                                  color: colors.text,
+                                  marginBottom: getScaledFontSize(4),
+                                }
+                              ]}>
+                                {agency.name}
+                              </Text>
+                              <Text style={[
+                                styles.listItemRole,
+                                {
+                                  fontSize: getScaledFontSize(14),
+                                  fontWeight: getScaledFontWeight(400) as any,
+                                  color: colors.text + '80',
+                                }
+                              ]} numberOfLines={2}>
+                                {agency.description}
+                              </Text>
+                              {agency.city && agency.state && (
+                                <Text style={[
+                                  styles.listItemRole,
+                                  {
+                                    fontSize: getScaledFontSize(12),
+                                    fontWeight: getScaledFontWeight(400) as any,
+                                    color: colors.text + '60',
+                                    marginTop: getScaledFontSize(4),
+                                  }
+                                ]}>
+                                  {agency.city}, {agency.state}
+                                </Text>
+                              )}
+                            </View>
+                            <IconSymbol name="chevron.right" size={getScaledFontSize(20)} color={colors.text + '60'} />
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </ScrollView>
+                  </TabScreen>
+                );
+              }
+              
               return (
               <TabScreen
                 key={category.id}
@@ -436,10 +583,20 @@ export default function ModalScreen() {
                           isManual: true,
                           relationship: member.relationship,
                         }));
-                        const combinedProviders = filterProvidersByLastVisited([
+                        let combinedProviders = filterProvidersByLastVisited([
                           ...subCategory.doctors,
                           ...manualProviders,
                         ]);
+                        // Filter providers based on search query
+                        if (providerSearchQuery.trim()) {
+                          const query = providerSearchQuery.toLowerCase().trim();
+                          combinedProviders = combinedProviders.filter(provider => 
+                            provider.name.toLowerCase().includes(query) ||
+                            (provider.qualifications && provider.qualifications.toLowerCase().includes(query)) ||
+                            (provider.specialty && provider.specialty.toLowerCase().includes(query)) ||
+                            (provider.relationship && provider.relationship.toLowerCase().includes(query))
+                          );
+                        }
                         const canAddMember = category.id !== 'medical';
                         const isFormOpen = openManualFormKey === subCategoryKey;
                         const manualSubCategoryLabel = manualSubCategoryId
@@ -452,6 +609,18 @@ export default function ModalScreen() {
                           label={subCategory.name}
                         >
                           <ScrollView contentContainerStyle={styles.cardsContainer}>
+                            <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                              <PaperTextInput
+                                label="Search providers"
+                                value={providerSearchQuery}
+                                onChangeText={setProviderSearchQuery}
+                                mode="outlined"
+                                left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+                                style={{ backgroundColor: colors.background }}
+                                textColor={colors.text}
+                                activeOutlineColor={colors.tint}
+                              />
+                            </View>
                             {canAddMember && (
                               <View style={styles.addMemberContainer}>
                                 {isFormOpen ? (
@@ -568,7 +737,7 @@ export default function ModalScreen() {
                                   qualifications={provider.isManual
                                     ? (provider.relationship || provider.qualifications || 'Member')
                                     : (provider.qualifications || 'Healthcare Provider')}
-                                  image={provider.image || undefined}
+                                  image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                                   onPress={provider.isManual ? undefined : () => {
                                     router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
                                   }}
@@ -595,14 +764,37 @@ export default function ModalScreen() {
                 ) : (
                   // Category has no subcategories: Show all providers directly
                   <ScrollView contentContainerStyle={styles.cardsContainer}>
-                    {category.doctors.length === 0 ? (
-                      <View style={styles.emptyDepartmentContainer}>
-                        <Text style={[styles.emptyText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
-                          No providers in this category
-                        </Text>
-                      </View>
-                    ) : (
-                      filterProvidersByLastVisited(category.doctors).map((provider) => {
+                    <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                      <PaperTextInput
+                        label="Search providers"
+                        value={providerSearchQuery}
+                        onChangeText={setProviderSearchQuery}
+                        mode="outlined"
+                        left={<PaperTextInput.Icon icon={() => <MaterialIcons name="search" size={getScaledFontSize(20)} color={colors.text + '80'} />} />}
+                        style={{ backgroundColor: colors.background }}
+                        textColor={colors.text}
+                        activeOutlineColor={colors.tint}
+                      />
+                    </View>
+                    {(() => {
+                      let filteredDoctors = filterProvidersByLastVisited(category.doctors);
+                      // Filter providers based on search query
+                      if (providerSearchQuery.trim()) {
+                        const query = providerSearchQuery.toLowerCase().trim();
+                        filteredDoctors = filteredDoctors.filter(provider => 
+                          provider.name.toLowerCase().includes(query) ||
+                          (provider.qualifications && provider.qualifications.toLowerCase().includes(query)) ||
+                          (provider.specialty && provider.specialty.toLowerCase().includes(query))
+                        );
+                      }
+                      return filteredDoctors.length === 0 ? (
+                        <View style={styles.emptyDepartmentContainer}>
+                          <Text style={[styles.emptyText, { color: colors.text, fontSize: getScaledFontSize(14), fontWeight: getScaledFontWeight(500) as any }]}>
+                            {category.doctors.length === 0 ? 'No providers in this category' : 'No providers match your search'}
+                          </Text>
+                        </View>
+                      ) : (
+                        filteredDoctors.map((provider) => {
                         const isSelected = selectedProviderIds.has(String(provider.id));
                         const canAdd = !isSelected && !isCircleFull;
                         const showAction = isSelected || !isCircleFull;
@@ -612,7 +804,7 @@ export default function ModalScreen() {
                           id={provider.id}
                           name={provider.name}
                           qualifications={provider.qualifications || 'Healthcare Provider'}
-                          image={provider.image || undefined}
+                          image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                           onPress={() => {
                             router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
                           }}
@@ -629,7 +821,8 @@ export default function ModalScreen() {
                         />
                         );
                       })
-                    )}
+                    );
+                    })()}
                   </ScrollView>
                 )}
               </TabScreen>
@@ -737,5 +930,29 @@ const styles = StyleSheet.create({
   subCategoryTitle: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+  },
+  listAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  listItemContent: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  listItemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  listItemRole: {
+    fontSize: 14,
+    color: '#666',
   },
 });

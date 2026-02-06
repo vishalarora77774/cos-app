@@ -31,6 +31,22 @@ export interface ProcessedClinic {
   };
   phone?: string;
   email?: string;
+  type: 'clinic' | 'lab'; // Type of organization
+}
+
+export interface ProcessedLab {
+  id: string;
+  name: string;
+  identifier?: string;
+  address?: {
+    line?: string[];
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
+  phone?: string;
+  email?: string;
 }
 
 export interface ProcessedPatient {
@@ -147,22 +163,48 @@ export interface ProcessedEncounter {
   }>;
 }
 
+export interface ProcessedEmergencyContact {
+  name: string;
+  relationship?: string;
+  phone: string;
+  email?: string;
+  clinicId: string;
+  clinicName: string;
+  patientId: string;
+}
+
+export interface ProcessedHealthDetails {
+  height?: string; // e.g., "182 cm"
+  weight?: string; // e.g., "111.1 kg"
+  bloodType?: string; // e.g., "O+", "A-"
+  bloodPressureSystolic?: string; // e.g., "120"
+  bloodPressureDiastolic?: string; // e.g., "80"
+  usesCpap: boolean;
+  chronicConditions: string[]; // e.g., ["Diabetes", "Hypertension"]
+  patientId: string;
+}
+
 export interface ProcessedHealthData {
   clinics: ProcessedClinic[];
+  labs: ProcessedLab[];
   patients: ProcessedPatient[];
   providers: ProcessedProvider[];
   medicalReports: ProcessedMedicalReport[];
   appointments: ProcessedAppointment[];
   medications: ProcessedMedication[];
   encounters: ProcessedEncounter[];
+  emergencyContacts: ProcessedEmergencyContact[];
+  healthDetails: ProcessedHealthDetails | null;
   metadata: {
     processedAt: string;
     totalClinics: number;
+    totalLabs: number;
     totalPatients: number;
     totalProviders: number;
     totalReports: number;
     totalAppointments: number;
     totalMedications: number;
+    totalEmergencyContacts: number;
   };
 }
 
@@ -386,6 +428,76 @@ interface FHIROrganization extends FHIRResource {
   }>;
 }
 
+interface FHIRObservation extends FHIRResource {
+  resourceType: 'Observation';
+  code?: {
+    text?: string;
+    coding?: Array<{
+      system?: string;
+      code?: string;
+      display?: string;
+    }>;
+  };
+  valueQuantity?: {
+    value?: number;
+    unit?: string;
+    system?: string;
+    code?: string;
+  };
+  valueString?: string;
+  component?: Array<{
+    code?: {
+      text?: string;
+      coding?: Array<{
+        code?: string;
+        display?: string;
+      }>;
+    };
+    valueQuantity?: {
+      value?: number;
+      unit?: string;
+    };
+  }>;
+  effectiveDateTime?: string;
+  subject?: {
+    reference?: string;
+  };
+}
+
+interface FHIRCondition extends FHIRResource {
+  resourceType: 'Condition';
+  code?: {
+    text?: string;
+    coding?: Array<{
+      code?: string;
+      display?: string;
+    }>;
+  };
+  clinicalStatus?: {
+    coding?: Array<{
+      code?: string;
+      display?: string;
+    }>;
+  };
+  subject?: {
+    reference?: string;
+  };
+}
+
+interface FHIRDevice extends FHIRResource {
+  resourceType: 'Device';
+  type?: {
+    text?: string;
+    coding?: Array<{
+      code?: string;
+      display?: string;
+    }>;
+  };
+  patient?: {
+    reference?: string;
+  };
+}
+
 // ============================================================================
 // Main Processing Functions
 // ============================================================================
@@ -405,6 +517,9 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
   const encounters: FHIREncounter[] = [];
   const medications: FHIRMedicationStatement[] = [];
   const organizations: FHIROrganization[] = [];
+  const observations: FHIRObservation[] = [];
+  const conditions: FHIRCondition[] = [];
+  const devices: FHIRDevice[] = [];
 
   rawFhirData.forEach((resource: any) => {
     switch (resource.resourceType) {
@@ -426,11 +541,20 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
       case 'Organization':
         organizations.push(resource as FHIROrganization);
         break;
+      case 'Observation':
+        observations.push(resource as FHIRObservation);
+        break;
+      case 'Condition':
+        conditions.push(resource as FHIRCondition);
+        break;
+      case 'Device':
+        devices.push(resource as FHIRDevice);
+        break;
     }
   });
 
-  // Process clinics (organizations)
-  const processedClinics = processClinics(organizations, rawFhirData);
+  // Process organizations into clinics and labs
+  const { clinics: processedClinics, labs: processedLabs } = processOrganizations(organizations, rawFhirData);
 
   // Process patients and map to clinics
   const processedPatients = processPatients(patients, processedClinics);
@@ -472,22 +596,42 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
     processedClinics
   );
 
+  // Process emergency contacts from all patients
+  const processedEmergencyContacts = processEmergencyContacts(
+    processedPatients,
+    processedClinics,
+    rawFhirData
+  );
+
+  // Process health details from observations, conditions, and devices
+  const processedHealthDetails = processHealthDetails(
+    observations,
+    conditions,
+    devices,
+    processedPatients
+  );
+
   return {
     clinics: processedClinics,
+    labs: processedLabs,
     patients: processedPatients,
     providers: processedProviders,
     medicalReports: processedReports,
     appointments: processedAppointments,
     medications: processedMedications,
     encounters: processedEncounters,
+    emergencyContacts: processedEmergencyContacts,
+    healthDetails: processedHealthDetails,
     metadata: {
       processedAt: new Date().toISOString(),
       totalClinics: processedClinics.length,
+      totalLabs: processedLabs.length,
       totalPatients: processedPatients.length,
       totalProviders: processedProviders.length,
       totalReports: processedReports.length,
       totalAppointments: processedAppointments.length,
       totalMedications: processedMedications.length,
+      totalEmergencyContacts: processedEmergencyContacts.length,
     },
   };
 }
@@ -497,65 +641,134 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
 // ============================================================================
 
 /**
- * Processes organizations into clinics
+ * Determines if an organization is a lab or clinic based on name patterns
  */
-function processClinics(
+function isLab(orgName: string): boolean {
+  const nameLower = orgName.toLowerCase();
+  const labKeywords = [
+    'lab',
+    'laboratory',
+    'diagnostic',
+    'pathology',
+    'quest',
+    'labcorp',
+    'testing',
+    'specimen',
+    'analytical',
+    'imaging', // Imaging centers are typically diagnostic/lab services
+  ];
+  
+  return labKeywords.some(keyword => nameLower.includes(keyword));
+}
+
+/**
+ * Determines if an organization should be excluded (internal systems, interfaces, etc.)
+ */
+function shouldExcludeOrganization(orgName: string): boolean {
+  const nameLower = orgName.toLowerCase();
+  const excludeKeywords = [
+    'interface',
+    'pws interface',
+    'system',
+    'internal',
+    'csv', // Exclude CSV export artifacts like "Cc Csv Sonoma Valley Hospital Sa"
+  ];
+  
+  return excludeKeywords.some(keyword => nameLower.includes(keyword));
+}
+
+
+/**
+ * Processes organizations into clinics and labs separately
+ */
+function processOrganizations(
   organizations: FHIROrganization[],
   allResources: FHIRResource[]
-): ProcessedClinic[] {
-  const clinics: ProcessedClinic[] = [];
+): { clinics: ProcessedClinic[]; labs: ProcessedLab[] } {
   const clinicMap = new Map<string, ProcessedClinic>();
+  const labMap = new Map<string, ProcessedLab>();
 
   // Process explicit organizations
   organizations.forEach(org => {
-    const clinicId = org.id;
-    if (!clinicMap.has(clinicId)) {
-      const address = org.address?.[0];
-      const phone = org.telecom?.find(t => t.system === 'phone')?.value;
-      const email = org.telecom?.find(t => t.system === 'email')?.value;
+    const orgId = org.id;
+    const orgName = org.name || 'Unknown Organization';
+    
+    // Skip internal systems and interfaces
+    if (shouldExcludeOrganization(orgName)) {
+      return;
+    }
+    
+    const address = org.address?.[0];
+    const phone = org.telecom?.find(t => t.system === 'phone')?.value;
+    const email = org.telecom?.find(t => t.system === 'email')?.value;
 
-      clinicMap.set(clinicId, {
-        id: clinicId,
-        name: org.name || 'Unknown Clinic',
-        identifier: org.identifier?.[0]?.value,
-        address: address ? {
-          line: address.line,
-          city: address.city,
-          state: address.state,
-          zip: address.postalCode,
-          country: address.country,
-        } : undefined,
-        phone,
-        email,
-      });
+    const baseOrg = {
+      id: orgId,
+      name: orgName,
+      identifier: org.identifier?.[0]?.value,
+      address: address ? {
+        line: address.line,
+        city: address.city,
+        state: address.state,
+        zip: address.postalCode,
+        country: address.country,
+      } : undefined,
+      phone,
+      email,
+    };
+
+    if (isLab(orgName)) {
+      if (!labMap.has(orgId)) {
+        labMap.set(orgId, baseOrg);
+      }
+    } else {
+      if (!clinicMap.has(orgId)) {
+        clinicMap.set(orgId, {
+          ...baseOrg,
+          type: 'clinic' as const,
+        });
+      }
     }
   });
 
-  // Extract clinics from patient managing organizations
+  // Extract organizations from patient managing organizations
   allResources.forEach((resource: any) => {
     if (resource.resourceType === 'Patient' && resource.managingOrganization) {
       const orgRef = resource.managingOrganization.reference;
       if (orgRef) {
         const orgId = orgRef.split('/')[1];
-        if (!clinicMap.has(orgId)) {
+        const orgName = resource.managingOrganization.display || 'Unknown Organization';
+        
+        // Skip if already excluded or already processed
+        if (shouldExcludeOrganization(orgName)) {
+          return;
+        }
+        
+        if (!clinicMap.has(orgId) && !labMap.has(orgId)) {
+          // Patient managing organizations are typically clinics, not labs
           clinicMap.set(orgId, {
             id: orgId,
-            name: resource.managingOrganization.display || 'Unknown Clinic',
+            name: orgName,
+            type: 'clinic' as const,
           });
         }
       }
     }
   });
 
-  // If no clinics found, create a default one
-  if (clinicMap.size === 0) {
+  // If no organizations found, create a default clinic
+  if (clinicMap.size === 0 && labMap.size === 0) {
     clinicMap.set('default-clinic', {
       id: 'default-clinic',
       name: 'Default Clinic',
+      type: 'clinic' as const,
     });
   }
 
-  return Array.from(clinicMap.values());
+  return {
+    clinics: Array.from(clinicMap.values()),
+    labs: Array.from(labMap.values()),
+  };
 }
 
 /**
@@ -564,7 +777,7 @@ function processClinics(
 function processPatients(
   patients: FHIRPatient[],
   clinics: ProcessedClinic[]
-): ProcessedPatient[] {
+): Array<ProcessedPatient & { managingOrgDisplay?: string }> {
   return patients.map(patient => {
     const nameObj = patient.name?.find(n => n.use === 'official') || patient.name?.[0] || {};
     const fullName = nameObj.text || 
@@ -613,8 +826,46 @@ function processPatients(
     }
 
     // Map patient to clinic (use managing organization or default to first clinic)
-    const clinicId = patient.managingOrganization?.reference?.split('/')[1] || 
+    let clinicId: string = patient.managingOrganization?.reference?.split('/')[1] || 
       clinics[0]?.id || 'default-clinic';
+    const managingOrgDisplay = patient.managingOrganization?.display;
+    
+    // Check if the clinicId exists in the clinics array
+    let clinicExists = clinics.some(c => c.id === clinicId);
+    
+    // If clinic doesn't exist or managing org is excluded, try to find matching clinic by name
+    if (!clinicExists || (managingOrgDisplay && shouldExcludeOrganization(managingOrgDisplay))) {
+      if (managingOrgDisplay) {
+        // Normalize the display name (remove CSV artifacts, extra spaces, etc.)
+        const normalizedDisplay = managingOrgDisplay
+          .toLowerCase()
+          .replace(/^(cc\s+)?csv\s+/i, '')
+          .replace(/\s+sa$/i, '')
+          .trim();
+        
+        // Try to find a clinic that matches
+        const matchingClinic = clinics.find(c => {
+          const clinicNameLower = c.name.toLowerCase();
+          // Check if clinic name is contained in the display name or vice versa
+          return normalizedDisplay.includes(clinicNameLower) || 
+                 clinicNameLower.includes(normalizedDisplay) ||
+                 // Also check if removing common words helps match
+                 normalizedDisplay.replace(/\s*(hospital|medical|center|clinic)\s*/gi, '').includes(
+                   clinicNameLower.replace(/\s*(hospital|medical|center|clinic)\s*/gi, '')
+                 );
+        });
+        
+        if (matchingClinic) {
+          clinicId = matchingClinic.id;
+          clinicExists = true;
+        }
+      }
+    }
+    
+    // Final fallback
+    if (!clinicExists) {
+      clinicId = clinics[0]?.id || 'default-clinic';
+    }
 
     return {
       id: patient.id,
@@ -629,6 +880,7 @@ function processPatients(
       address,
       maritalStatus: maritalStatus || undefined,
       emergencyContact,
+      managingOrgDisplay,
     };
   });
 }
@@ -1116,6 +1368,163 @@ function processMedications(
 }
 
 /**
+ * Processes emergency contacts from all patients
+ * Uses the same clinic names as processed in processOrganizations to ensure consistency
+ */
+function processEmergencyContacts(
+  patients: Array<ProcessedPatient & { managingOrgDisplay?: string }>,
+  clinics: ProcessedClinic[],
+  allResources: FHIRResource[]
+): ProcessedEmergencyContact[] {
+  // Create a map of clinic IDs to clinic names from the processed clinics
+  // This ensures we use the exact same clinic names as shown in Connected EHRs
+  const clinicMap = new Map(clinics.map(c => [c.id, c.name]));
+  const emergencyContacts: ProcessedEmergencyContact[] = [];
+
+  patients.forEach(patient => {
+    if (patient.emergencyContact && patient.emergencyContact.name && patient.emergencyContact.phone) {
+      // Use the clinic name from the processed clinics array (same source as Connected EHRs)
+      // This ensures consistency between Connected EHRs and Emergency Contacts
+      const clinicName = clinicMap.get(patient.clinicId) || 'Unknown Clinic';
+
+      emergencyContacts.push({
+        name: patient.emergencyContact.name,
+        relationship: patient.emergencyContact.relationship,
+        phone: patient.emergencyContact.phone,
+        email: undefined, // Email not typically in FHIR emergency contact
+        clinicId: patient.clinicId,
+        clinicName: clinicName,
+        patientId: patient.id,
+      });
+    }
+  });
+
+  return emergencyContacts;
+}
+
+/**
+ * Processes health details from observations, conditions, and devices
+ */
+function processHealthDetails(
+  observations: FHIRObservation[],
+  conditions: FHIRCondition[],
+  devices: FHIRDevice[],
+  patients: ProcessedPatient[]
+): ProcessedHealthDetails | null {
+  if (patients.length === 0) {
+    return null;
+  }
+
+  const patientId = patients[0].id; // Use first patient
+  let height: string | undefined;
+  let weight: string | undefined;
+  let bloodType: string | undefined;
+  let bloodPressureSystolic: string | undefined;
+  let bloodPressureDiastolic: string | undefined;
+  const chronicConditions: string[] = [];
+  let usesCpap = false;
+
+  // Process observations
+  observations.forEach(obs => {
+    const codeText = obs.code?.text?.toLowerCase() || '';
+    const codeDisplay = obs.code?.coding?.[0]?.display?.toLowerCase() || '';
+    const combined = codeText + ' ' + codeDisplay;
+
+    // Height
+    if ((combined.includes('height') || codeText.includes('height')) && obs.valueQuantity) {
+      const value = obs.valueQuantity.value;
+      const unit = obs.valueQuantity.unit || 'cm';
+      height = `${value} ${unit}`;
+    }
+
+    // Weight
+    if ((combined.includes('weight') || codeText.includes('weight')) && obs.valueQuantity) {
+      const value = obs.valueQuantity.value;
+      const unit = obs.valueQuantity.unit || 'kg';
+      weight = `${value} ${unit}`;
+    }
+
+    // Blood Pressure
+    if (combined.includes('blood pressure') || codeText.includes('blood pressure')) {
+      if (obs.component && obs.component.length > 0) {
+        obs.component.forEach(comp => {
+          const compText = comp.code?.text?.toLowerCase() || '';
+          const compDisplay = comp.code?.coding?.[0]?.display?.toLowerCase() || '';
+          if (compText.includes('systolic') || compDisplay.includes('systolic')) {
+            bloodPressureSystolic = comp.valueQuantity?.value?.toString();
+          }
+          if (compText.includes('diastolic') || compDisplay.includes('diastolic')) {
+            bloodPressureDiastolic = comp.valueQuantity?.value?.toString();
+          }
+        });
+      } else if (obs.valueQuantity) {
+        // Single value - assume systolic if no components
+        bloodPressureSystolic = obs.valueQuantity.value?.toString();
+      }
+    }
+
+    // Blood Type
+    if ((combined.includes('blood type') || combined.includes('abo') || combined.includes('rh')) && obs.valueString) {
+      bloodType = obs.valueString;
+    } else if ((combined.includes('blood type') || combined.includes('abo')) && obs.valueQuantity) {
+      // Some systems store blood type as a coded value
+      bloodType = obs.valueQuantity.code || obs.valueQuantity.value?.toString();
+    }
+  });
+
+  // Process conditions for chronic medical conditions
+  const chronicConditionKeywords = [
+    'diabetes',
+    'kidney disease',
+    'renal',
+    'congestive heart failure',
+    'heart failure',
+    'copd',
+    'asthma',
+    'hypertension',
+    'high blood pressure',
+    'chronic',
+  ];
+
+  conditions.forEach(condition => {
+    const status = condition.clinicalStatus?.coding?.[0]?.code;
+    // Only include active conditions
+    if (status === 'active' || status === 'recurrence' || status === 'relapse') {
+      const conditionText = condition.code?.text || condition.code?.coding?.[0]?.display || '';
+      const conditionLower = conditionText.toLowerCase();
+      
+      // Check if it's a chronic condition
+      const isChronic = chronicConditionKeywords.some(keyword => conditionLower.includes(keyword));
+      if (isChronic && conditionText) {
+        chronicConditions.push(conditionText);
+      }
+    }
+  });
+
+  // Process devices for CPAP
+  devices.forEach(device => {
+    const typeText = device.type?.text?.toLowerCase() || '';
+    const typeDisplay = device.type?.coding?.[0]?.display?.toLowerCase() || '';
+    if (typeText.includes('cpap') || typeDisplay.includes('cpap') || 
+        typeText.includes('continuous positive airway pressure') ||
+        typeDisplay.includes('continuous positive airway pressure')) {
+      usesCpap = true;
+    }
+  });
+
+  return {
+    height,
+    weight,
+    bloodType,
+    bloodPressureSystolic,
+    bloodPressureDiastolic,
+    usesCpap,
+    chronicConditions,
+    patientId,
+  };
+}
+
+/**
  * Processes encounters
  */
 function processEncounters(
@@ -1171,13 +1580,18 @@ function processEncounters(
 import { USE_MOCK_DATA, getFastenHealthDataName } from './fasten-health-config';
 import { categorizeProvider } from './provider-categorization';
 
+// Import JSON files at module level (required for React Native/Expo)
+// These must be at the top level, not inside async functions
+const mockFastenData = require('../data/mock-fasten-health-data.json');
+const originalFastenData = require('../data/fasten-health-data.json');
+
 /**
  * Processes data from a JSON file (for app usage)
  * Can be replaced with API call when moved to backend
  * Supports both original and mock data
  * 
  * Note: filePath parameter is for future API use - in React Native/Expo,
- * we must use static require() paths, not dynamic ones
+ * we must use static require() paths at module level, not dynamic ones
  */
 export async function processFastenHealthDataFromFile(
   filePath?: string
@@ -1185,7 +1599,7 @@ export async function processFastenHealthDataFromFile(
   try {
     // In app: load from file using static require paths
     // In API: this would be replaced with database query or API call
-    // Note: React Native/Expo requires static require() paths, not dynamic ones
+    // Note: React Native/Expo requires static require() paths at module level
     
     // IMPORTANT: Check USE_MOCK_DATA at runtime to ensure we use current config
     // This helps ensure we always use the current config value
@@ -1197,11 +1611,12 @@ export async function processFastenHealthDataFromFile(
     
     console.log(`📂 Loading data from ${dataSourceName} file (USE_MOCK_DATA: ${useMockData}, env: ${process.env.EXPO_PUBLIC_USE_MOCK_DATA})`);
     
+    // Use the pre-loaded module-level data
     if (useMockData) {
-      fastenData = require('../data/mock-fasten-health-data.json');
+      fastenData = mockFastenData;
       console.log(`📦 Loaded mock data file (${Array.isArray(fastenData) ? fastenData.length : 1} resources)`);
     } else {
-      fastenData = require('../data/fasten-health-data-2.json');
+      fastenData = originalFastenData;
       console.log(`📦 Loaded original data file (${Array.isArray(fastenData) ? fastenData.length : 1} resources)`);
     }
     
@@ -1215,8 +1630,8 @@ export async function processFastenHealthDataFromFile(
     if (USE_MOCK_DATA) {
       console.log('⚠️ Mock data failed, falling back to original data...');
       try {
-        const originalData = require('../data/fasten-health-data-2.json');
-        const rawData = Array.isArray(originalData) ? originalData : [originalData];
+        // Use the pre-loaded module-level data
+        const rawData = Array.isArray(originalFastenData) ? originalFastenData : [originalFastenData];
         console.log(`✅ Loaded ${rawData.length} resources from original data (fallback)`);
         return processFastenHealthData(rawData);
       } catch (fallbackError) {
@@ -1270,6 +1685,20 @@ export function getClinicData(
     appointments: processedData.appointments.filter(a => a.clinicId === clinicId),
     medications: processedData.medications.filter(m => m.clinicId === clinicId),
   };
+}
+
+/**
+ * Gets all clinics (for connected EHRs view)
+ */
+export function getClinics(processedData: ProcessedHealthData): ProcessedClinic[] {
+  return processedData.clinics;
+}
+
+/**
+ * Gets all labs (for report filters)
+ */
+export function getLabs(processedData: ProcessedHealthData): ProcessedLab[] {
+  return processedData.labs;
 }
 
 /**

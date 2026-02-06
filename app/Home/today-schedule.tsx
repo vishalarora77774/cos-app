@@ -26,6 +26,17 @@ export default function TodayScheduleScreen() {
   const userImg = require('@/assets/images/dummy.jpg');
   
   const [patientName, setPatientName] = useState('Jenny Wilson');
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({
+    steps: 0,
+    heartRate: null,
+    sleepHours: 0,
+    caloriesBurned: 0,
+    isLoading: true,
+    error: null,
+  });
+  const [refreshing, setRefreshing] = useState(false);
+  const appState = useRef(AppState.currentState);
   
   // Load patient data and medications from Fasten Health
   useEffect(() => {
@@ -58,20 +69,6 @@ export default function TodayScheduleScreen() {
     loadPatientData();
     loadMedications();
   }, []);
-
-  const [healthMetrics, setHealthMetrics] = useState<HealthMetrics>({
-    steps: 0,
-    heartRate: null,
-    sleepHours: 0,
-    caloriesBurned: 0,
-    isLoading: true,
-    error: null,
-  });
-
-  const [refreshing, setRefreshing] = useState(false);
-  const appState = useRef(AppState.currentState);
-
-  const [medications, setMedications] = useState<Medication[]>([]);
 
   const [tasks, setTasks] = useState<Task[]>([
     {
@@ -122,18 +119,67 @@ export default function TodayScheduleScreen() {
   ]);
 
   // Fetch health data function
-  const fetchHealthData = async (showLoading = true) => {
+  const fetchHealthData = async (showLoading = true): Promise<void> => {
     if (showLoading) {
       setHealthMetrics((prev) => ({ ...prev, isLoading: true }));
     }
+    
+    // Wrap everything in try-catch to prevent any crashes
     try {
-      const metrics = await getTodayHealthMetrics();
+      // Check if we're on iOS before attempting HealthKit
+      if (Platform.OS !== 'ios') {
+        setHealthMetrics({
+          steps: 0,
+          heartRate: null,
+          sleepHours: 0,
+          caloriesBurned: 0,
+          isLoading: false,
+          error: 'Health data is only available on iOS devices.',
+        });
+        return;
+      }
+      
+      // Wrap HealthKit call in additional error handling to prevent crashes
+      const metrics = await Promise.race([
+        getTodayHealthMetrics().catch((err) => {
+          // If HealthKit fails, return a safe default instead of crashing
+          console.error('HealthKit fetch failed, using defaults:', err);
+          return {
+            steps: 0,
+            heartRate: null,
+            sleepHours: 0,
+            caloriesBurned: 0,
+            isLoading: false,
+            error: 'Failed to load health data. Please try again later.',
+          };
+        }),
+        // Timeout after 5 seconds to prevent hanging (reduced from 10)
+        new Promise<HealthMetrics>((resolve) => {
+          setTimeout(() => {
+            resolve({
+              steps: 0,
+              heartRate: null,
+              sleepHours: 0,
+              caloriesBurned: 0,
+              isLoading: false,
+              error: 'Health data request timed out. Please try again.',
+            });
+          }, 5000);
+        }),
+      ]);
+      
       setHealthMetrics(metrics);
     } catch (error) {
+      console.error('Error in fetchHealthData:', error);
+      // Ensure we always set a valid state, even on error - never crash
       setHealthMetrics((prev) => ({
         ...prev,
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to fetch health data',
+        steps: prev?.steps || 0,
+        heartRate: prev?.heartRate || null,
+        sleepHours: prev?.sleepHours || 0,
+        caloriesBurned: prev?.caloriesBurned || 0,
       }));
     }
   };
@@ -146,23 +192,43 @@ export default function TodayScheduleScreen() {
   };
 
   useEffect(() => {
-    // Fetch health metrics when component mounts
-    fetchHealthData();
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    // TEMPORARILY DISABLE HealthKit initialization on mount to prevent crashes
+    // HealthKit initialization is causing crashes - we'll make it optional/lazy
+    // Users can manually refresh to load health data if needed
+    console.log('⚠️ HealthKit initialization disabled on mount to prevent crashes');
+    
+    // Set initial state without loading
+    setHealthMetrics({
+      steps: 0,
+      heartRate: null,
+      sleepHours: 0,
+      caloriesBurned: 0,
+      isLoading: false,
+      error: null, // No error - just not loaded yet
+    });
 
-    // Listen for app state changes to re-check permissions when app comes to foreground
+    // Listen for app state changes
     const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (!isMounted) return;
+      
       if (
         appState.current.match(/inactive|background/) &&
         nextAppState === 'active'
       ) {
-        // App has come to the foreground, re-check health data
-        console.log('🔄 App came to foreground, re-checking health data...');
-        fetchHealthData(false);
+        // App has come to the foreground - don't auto-load health data
+        console.log('🔄 App came to foreground');
       }
       appState.current = nextAppState;
     });
 
     return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       subscription.remove();
     };
   }, []);

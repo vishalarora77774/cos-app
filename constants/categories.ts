@@ -1,3 +1,5 @@
+import { getCategoryIcon, getSubCategoryIcon } from './category-icons';
+
 /**
  * Category groups for Circle of Support
  * Structure: Category -> Sub-categories -> Providers
@@ -7,89 +9,103 @@ export interface SubCategory {
   id: string;
   name: string;
   keywords: string[]; // Keywords to match providers to this sub-category
+  icon?: string; // Optional icon name
 }
 
 export interface Category {
   id: string;
   name: string;
   subCategories: SubCategory[];
+  icon?: string; // Optional icon name
 }
 
 export const SUPPORT_CATEGORIES: Category[] = [
   {
+    id: 'care-manager',
+    name: 'Care Manager',
+    icon: getCategoryIcon('care-manager'),
+    subCategories: [],
+  },
+  {
+    id: 'medical',
+    name: 'Medical',
+    icon: getCategoryIcon('medical'),
+    subCategories: [
+      { id: 'pcp', name: 'PCP', icon: getSubCategoryIcon('pcp'), keywords: ['primary care', 'family medicine', 'family practice', 'general practice', 'internal medicine', 'general practitioner', 'gp', 'family physician', 'primary physician', 'md', 'do', 'physician', 'naturopath', 'naturopathic', 'chiropractor', 'chiropractic', 'dc'] },
+      { id: 'all-specialists', name: 'All Specialists', icon: getSubCategoryIcon('all-specialists'), keywords: ['specialist', 'specialty', 'cardiology', 'cardiac', 'neurology', 'neurological', 'dermatology', 'dermatologist', 'endocrinology', 'endocrinologist', 'gastroenterology', 'gastroenterologist', 'hematology', 'hematologist', 'oncology', 'oncologist', 'nephrology', 'nephrologist', 'pulmonology', 'pulmonologist', 'rheumatology', 'rheumatologist', 'urology', 'urologist', 'gynecology', 'gynecologist', 'obstetrics', 'obstetrician', 'pediatrics', 'pediatrician', 'orthopedics', 'orthopedic', 'ortho', 'ophthalmology', 'ophthalmologist', 'otolaryngology', 'ent', 'allergy', 'allergist', 'immunology', 'immunologist', 'infectious disease', 'radiology', 'radiologist', 'pathology', 'pathologist', 'anesthesiology', 'anesthesiologist'] },
+      { id: 'surgical-specialists', name: 'Surgical Specialists', icon: getSubCategoryIcon('surgical-specialists'), keywords: ['surgeon', 'surgery', 'surgical', 'cardiothoracic', 'neurosurgery', 'orthopedic surgery', 'plastic surgery', 'general surgery', 'vascular surgery', 'urological surgery', 'gynecological surgery', 'otolaryngology', 'ophthalmology'] },
+      { id: 'registered-nurses', name: 'Registered Nurses', icon: getSubCategoryIcon('registered-nurses'), keywords: ['registered nurse', 'rn', 'nurse', 'nursing', 'r.n.', 'r.n'] },
+      { id: 'nurse-practitioners', name: 'Nurse Practitioners', icon: getSubCategoryIcon('nurse-practitioners'), keywords: ['nurse practitioner', 'np', 'n.p.', 'n.p', 'aprn', 'apn', 'fnp', 'anp', 'pnp'] },
+      { id: 'physician-assistants', name: 'Physician Assistants', icon: getSubCategoryIcon('physician-assistants'), keywords: ['physician assistant', 'pa', 'pa-c', 'pa c', 'physician\'s assistant'] },
+      { id: 'physical-occupational-therapists', name: 'Physical/Occupational Therapists', icon: getSubCategoryIcon('physical-occupational-therapists'), keywords: ['physical therapist', 'pt', 'occupational therapist', 'ot', 'physical therapy', 'occupational therapy', 'physiotherapy', 'physiotherapist', 'rehabilitation', 'rehab'] },
+      { id: 'others', name: 'Others', icon: getSubCategoryIcon('others'), keywords: ['healthcare', 'provider', 'practitioner', 'medical'] },
+    ],
+  },
+  {
     id: 'mental-health',
     name: 'Mental Health',
+    icon: getCategoryIcon('mental-health'),
     subCategories: [
-      { id: 'psychiatrist', name: 'Psychiatrist', keywords: ['psychiatrist', 'psychiatry'] },
-      { id: 'psychologist', name: 'Psychologist', keywords: ['psychologist', 'psychology'] },
-      { id: 'mft', name: 'MFT', keywords: ['mft', 'marriage', 'family', 'therapist'] },
-      { id: 'lcsw', name: 'LCSW', keywords: ['lcsw', 'social worker', 'licensed clinical'] },
-      { id: 'aa', name: 'AA', keywords: ['aa', 'alcoholics anonymous', 'substance abuse'] },
-      { id: 'substance-abuse', name: 'Substance Abuse Counselors', keywords: ['substance abuse', 'addiction', 'counselor'] },
-    ],
-  },
-  {
-    id: 'family',
-    name: 'Family',
-    subCategories: [
-      { id: 'spouse', name: 'Spouse', keywords: ['spouse', 'partner', 'husband', 'wife'] },
-      { id: 'children', name: 'Children', keywords: ['children', 'child', 'son', 'daughter'] },
-      { id: 'siblings', name: 'Siblings', keywords: ['sibling', 'brother', 'sister'] },
-      { id: 'parents', name: 'Parents', keywords: ['parent', 'mother', 'father', 'mom', 'dad'] },
-      { id: 'cousins', name: 'Cousins', keywords: ['cousin'] },
-      { id: 'nephews', name: 'Nephews', keywords: ['nephew'] },
-      { id: 'niece', name: 'Niece', keywords: ['niece'] },
-    ],
-  },
-  {
-    id: 'social-leisure',
-    name: 'Social/Leisure',
-    subCategories: [
-      { id: 'friends', name: 'Friends', keywords: ['friend'] },
-      { id: 'groups', name: 'Groups', keywords: ['group', 'community'] },
-      { id: 'exercise', name: 'Exercise', keywords: ['exercise', 'fitness', 'trainer'] },
-      { id: 'yoga', name: 'Yoga', keywords: ['yoga', 'yogi'] },
-      { id: 'music', name: 'Music', keywords: ['music', 'musician'] },
-      { id: 'concerts', name: 'Concerts', keywords: ['concert'] },
-      { id: 'education', name: 'Education', keywords: ['education', 'teacher', 'tutor'] },
-    ],
-  },
-  {
-    id: 'faith',
-    name: 'Faith',
-    subCategories: [
-      { id: 'priest', name: 'Priest', keywords: ['priest', 'catholic'] },
-      { id: 'rabbi', name: 'Rabbi', keywords: ['rabbi', 'jewish'] },
-      { id: 'minister', name: 'Minister', keywords: ['minister', 'pastor', 'clergy'] },
-      { id: 'church', name: 'Church', keywords: ['church', 'christian'] },
-      { id: 'synagogue', name: 'Synagogue', keywords: ['synagogue', 'temple'] },
+      { id: 'psychiatrist', name: 'Psychiatrist', icon: getSubCategoryIcon('psychiatrist'), keywords: ['psychiatrist', 'psychiatry'] },
+      { id: 'psychologist', name: 'Psychologist', icon: getSubCategoryIcon('psychologist'), keywords: ['psychologist', 'psychology'] },
+      { id: 'mft', name: 'MFT', icon: getSubCategoryIcon('mft'), keywords: ['mft', 'marriage', 'family', 'therapist'] },
+      { id: 'lcsw', name: 'LCSW', icon: getSubCategoryIcon('lcsw'), keywords: ['lcsw', 'social worker', 'licensed clinical'] },
+      { id: 'aa', name: 'AA', icon: getSubCategoryIcon('aa'), keywords: ['aa', 'alcoholics anonymous', 'substance abuse'] },
+      { id: 'substance-abuse', name: 'Substance Abuse Counselors', icon: getSubCategoryIcon('substance-abuse'), keywords: ['substance abuse', 'addiction', 'counselor'] },
     ],
   },
   {
     id: 'services',
     name: 'Services',
+    icon: getCategoryIcon('services'),
     subCategories: [
-      { id: 'meals', name: 'Meals', keywords: ['meal', 'food', 'nutrition'] },
-      { id: 'caregivers', name: 'Caregivers', keywords: ['caregiver', 'care'] },
-      { id: 'aids', name: 'Aids', keywords: ['aid', 'assistant', 'helper'] },
-      { id: 'housekeeper', name: 'Housekeeper', keywords: ['housekeeper', 'cleaning'] },
-      { id: 'maintenance', name: 'Maintenance', keywords: ['maintenance', 'repair'] },
-      { id: 'delivery', name: 'Delivery', keywords: ['delivery', 'deliver'] },
-      { id: 'yard', name: 'Yard', keywords: ['yard', 'landscaping', 'gardening'] },
+      { id: 'meals', name: 'Meals', icon: getSubCategoryIcon('meals'), keywords: ['meal', 'food', 'nutrition'] },
+      { id: 'caregivers', name: 'Caregivers', icon: getSubCategoryIcon('caregivers'), keywords: ['caregiver', 'care'] },
+      { id: 'aids', name: 'Aids', icon: getSubCategoryIcon('aids'), keywords: ['aid', 'assistant', 'helper'] },
+      { id: 'housekeeper', name: 'Housekeeper', icon: getSubCategoryIcon('housekeeper'), keywords: ['housekeeper', 'cleaning'] },
+      { id: 'maintenance', name: 'Maintenance', icon: getSubCategoryIcon('maintenance'), keywords: ['maintenance', 'repair'] },
+      { id: 'delivery', name: 'Delivery', icon: getSubCategoryIcon('delivery'), keywords: ['delivery', 'deliver'] },
+      { id: 'yard', name: 'Yard', icon: getSubCategoryIcon('yard'), keywords: ['yard', 'landscaping', 'gardening'] },
     ],
   },
   {
-    id: 'medical',
-    name: 'Medical',
+    id: 'social-leisure',
+    name: 'Social/Leisure',
+    icon: getCategoryIcon('social-leisure'),
     subCategories: [
-      { id: 'pcp', name: 'PCP', keywords: ['primary care', 'family medicine', 'family practice', 'general practice', 'internal medicine', 'general practitioner', 'gp', 'family physician', 'primary physician', 'md', 'do', 'physician', 'naturopath', 'naturopathic', 'chiropractor', 'chiropractic', 'dc'] },
-      { id: 'all-specialists', name: 'All Specialists', keywords: ['specialist', 'specialty', 'cardiology', 'cardiac', 'neurology', 'neurological', 'dermatology', 'dermatologist', 'endocrinology', 'endocrinologist', 'gastroenterology', 'gastroenterologist', 'hematology', 'hematologist', 'oncology', 'oncologist', 'nephrology', 'nephrologist', 'pulmonology', 'pulmonologist', 'rheumatology', 'rheumatologist', 'urology', 'urologist', 'gynecology', 'gynecologist', 'obstetrics', 'obstetrician', 'pediatrics', 'pediatrician', 'orthopedics', 'orthopedic', 'ortho', 'ophthalmology', 'ophthalmologist', 'otolaryngology', 'ent', 'allergy', 'allergist', 'immunology', 'immunologist', 'infectious disease', 'radiology', 'radiologist', 'pathology', 'pathologist', 'anesthesiology', 'anesthesiologist'] },
-      { id: 'surgical-specialists', name: 'Surgical Specialists', keywords: ['surgeon', 'surgery', 'surgical', 'cardiothoracic', 'neurosurgery', 'orthopedic surgery', 'plastic surgery', 'general surgery', 'vascular surgery', 'urological surgery', 'gynecological surgery', 'otolaryngology', 'ophthalmology'] },
-      { id: 'registered-nurses', name: 'Registered Nurses', keywords: ['registered nurse', 'rn', 'nurse', 'nursing', 'r.n.', 'r.n'] },
-      { id: 'nurse-practitioners', name: 'Nurse Practitioners', keywords: ['nurse practitioner', 'np', 'n.p.', 'n.p', 'aprn', 'apn', 'fnp', 'anp', 'pnp'] },
-      { id: 'physician-assistants', name: 'Physician Assistants', keywords: ['physician assistant', 'pa', 'pa-c', 'pa c', 'physician\'s assistant'] },
-      { id: 'physical-occupational-therapists', name: 'Physical/Occupational Therapists', keywords: ['physical therapist', 'pt', 'occupational therapist', 'ot', 'physical therapy', 'occupational therapy', 'physiotherapy', 'physiotherapist', 'rehabilitation', 'rehab'] },
-      { id: 'others', name: 'Others', keywords: ['healthcare', 'provider', 'practitioner', 'medical'] },
+      { id: 'friends', name: 'Friends', icon: getSubCategoryIcon('friends'), keywords: ['friend'] },
+      { id: 'groups', name: 'Groups', icon: getSubCategoryIcon('groups'), keywords: ['group', 'community'] },
+      { id: 'exercise', name: 'Exercise', icon: getSubCategoryIcon('exercise'), keywords: ['exercise', 'fitness', 'trainer'] },
+      { id: 'yoga', name: 'Yoga', icon: getSubCategoryIcon('yoga'), keywords: ['yoga', 'yogi'] },
+      { id: 'music', name: 'Music', icon: getSubCategoryIcon('music'), keywords: ['music', 'musician'] },
+      { id: 'concerts', name: 'Concerts', icon: getSubCategoryIcon('concerts'), keywords: ['concert'] },
+      { id: 'education', name: 'Education', icon: getSubCategoryIcon('education'), keywords: ['education', 'teacher', 'tutor'] },
+    ],
+  },
+  {
+    id: 'faith',
+    name: 'Faith',
+    icon: getCategoryIcon('faith'),
+    subCategories: [
+      { id: 'priest', name: 'Priest', icon: getSubCategoryIcon('priest'), keywords: ['priest', 'catholic'] },
+      { id: 'rabbi', name: 'Rabbi', icon: getSubCategoryIcon('rabbi'), keywords: ['rabbi', 'jewish'] },
+      { id: 'minister', name: 'Minister', icon: getSubCategoryIcon('minister'), keywords: ['minister', 'pastor', 'clergy'] },
+      { id: 'church', name: 'Church', icon: getSubCategoryIcon('church'), keywords: ['church', 'christian'] },
+      { id: 'synagogue', name: 'Synagogue', icon: getSubCategoryIcon('synagogue'), keywords: ['synagogue', 'temple'] },
+    ],
+  },
+  {
+    id: 'family',
+    name: 'Family',
+    icon: getCategoryIcon('family'),
+    subCategories: [
+      { id: 'spouse', name: 'Spouse', icon: getSubCategoryIcon('spouse'), keywords: ['spouse', 'partner', 'husband', 'wife'] },
+      { id: 'children', name: 'Children', icon: getSubCategoryIcon('children'), keywords: ['children', 'child', 'son', 'daughter'] },
+      { id: 'siblings', name: 'Siblings', icon: getSubCategoryIcon('siblings'), keywords: ['sibling', 'brother', 'sister'] },
+      { id: 'parents', name: 'Parents', icon: getSubCategoryIcon('parents'), keywords: ['parent', 'mother', 'father', 'mom', 'dad'] },
+      { id: 'cousins', name: 'Cousins', icon: getSubCategoryIcon('cousins'), keywords: ['cousin'] },
+      { id: 'nephews', name: 'Nephews', icon: getSubCategoryIcon('nephews'), keywords: ['nephew'] },
+      { id: 'niece', name: 'Niece', icon: getSubCategoryIcon('niece'), keywords: ['niece'] },
     ],
   },
 ];

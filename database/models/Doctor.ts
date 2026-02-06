@@ -11,6 +11,8 @@ export default class Doctor extends Model {
   @field('phone') phone!: string | null;
   @field('email') email!: string | null;
   @field('address') address!: string | null;
+  @field('photo_url') photoUrl!: string | null;
+  @field('provider_id') providerId!: string | null; // Link to provider ID from Fasten Health
   @date('created_at') createdAt!: Date;
   @date('updated_at') updatedAt!: Date;
   @date('synced_at') syncedAt!: Date | null;

@@ -192,25 +192,35 @@ export const initializeHealthKit = (): Promise<boolean> => {
 
     console.log('🔐 Requesting HealthKit permissions:', permissions);
 
-    initMethod(permissions, (error: string) => {
-      if (error) {
-        console.error('❌ Error initializing HealthKit:', error);
-        // Parse error to provide better message
-        const errorObj = typeof error === 'string' ? { message: error } : error;
-        const errorMessage = errorObj?.message || String(error);
-        
-        if (errorMessage.includes('authorization') || errorMessage.includes('permission')) {
-          reject(new Error('Health permissions were denied or not granted. Please enable them in Settings > Privacy & Security > Health > CoS'));
-        } else {
-          reject(new Error(errorMessage));
+    try {
+      initMethod(permissions, (error: string) => {
+        try {
+          if (error) {
+            console.error('❌ Error initializing HealthKit:', error);
+            // Parse error to provide better message
+            const errorObj = typeof error === 'string' ? { message: error } : error;
+            const errorMessage = errorObj?.message || String(error);
+            
+            if (errorMessage.includes('authorization') || errorMessage.includes('permission')) {
+              reject(new Error('Health permissions were denied or not granted. Please enable them in Settings > Privacy & Security > Health > CoS'));
+            } else {
+              reject(new Error(errorMessage));
+            }
+            return;
+          }
+          
+          // initHealthKit can succeed even if permissions aren't granted
+          // Check authorization status to verify
+          handleInitSuccess(resolve);
+        } catch (callbackError) {
+          console.error('❌ Error in HealthKit init callback:', callbackError);
+          reject(callbackError instanceof Error ? callbackError : new Error(String(callbackError)));
         }
-        return;
-      }
-      
-      // initHealthKit can succeed even if permissions aren't granted
-      // Check authorization status to verify
-      handleInitSuccess(resolve);
-    });
+      });
+    } catch (initError) {
+      console.error('❌ Error calling initHealthKit:', initError);
+      reject(initError instanceof Error ? initError : new Error(String(initError)));
+    }
   });
 };
 

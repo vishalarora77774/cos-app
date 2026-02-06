@@ -283,7 +283,7 @@ export async function loadFastenHealthData(): Promise<FHIRResource[]> {
     // This works in React Native/Expo when the file is a proper JSON array
     const dataFile = USE_MOCK_DATA 
       ? require('../data/mock-fasten-health-data.json')
-      : require('../data/fasten-health-data-2.json');
+      : require('../data/fasten-health-data.json');
     
     const fastenData = dataFile;
     
@@ -307,7 +307,7 @@ export async function loadFastenHealthData(): Promise<FHIRResource[]> {
     if (USE_MOCK_DATA) {
       console.log('Falling back to original data...');
       try {
-        const originalData = require('../data/fasten-health-data-2.json');
+        const originalData = require('../data/fasten-health-data.json');
         if (Array.isArray(originalData)) {
           return originalData as FHIRResource[];
         }
@@ -1466,7 +1466,14 @@ export async function getProviderProgressNotes(practitionerId: string): Promise<
     return false;
   });
   
-  // Transform to progress notes
+  // Sort reports by date descending (most recent first) BEFORE formatting
+  providerReports.sort((a, b) => {
+    const dateA = a.effectiveDateTime || a.issued || new Date().toISOString();
+    const dateB = b.effectiveDateTime || b.issued || new Date().toISOString();
+    return new Date(dateB).getTime() - new Date(dateA).getTime();
+  });
+  
+  // Transform to progress notes (already sorted)
   const progressNotes: ProgressNote[] = providerReports.map(report => {
     const date = report.effectiveDateTime || report.issued || new Date().toISOString();
     const dateObj = new Date(date);
@@ -1497,12 +1504,8 @@ export async function getProviderProgressNotes(practitionerId: string): Promise<
     };
   });
   
-  // Sort by date descending (most recent first)
-  return progressNotes.sort((a, b) => {
-    const dateA = new Date(a.date + ' ' + a.time).getTime();
-    const dateB = new Date(b.date + ' ' + b.time).getTime();
-    return dateB - dateA;
-  });
+  // Already sorted by date descending (most recent first)
+  return progressNotes;
 }
 
 /**
