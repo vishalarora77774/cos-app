@@ -10,6 +10,7 @@ import { getFastenPractitionerById, Provider, getProviderDiagnosesAndTreatmentPl
 import { InitialsAvatar } from '@/utils/avatar-utils';
 import { useDoctor } from '@/hooks/use-doctor';
 import { useDoctorPhotos } from '@/hooks/use-doctor-photo';
+import { AppWrapper } from '@/components/app-wrapper';
 
 export default function DoctorDetailScreen() {
   const params = useLocalSearchParams();
@@ -578,7 +579,7 @@ export default function DoctorDetailScreen() {
   );
 
   return (
-    <>
+    <AppWrapper>
       <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Doctor Header */}
         <View style={[styles.header, { backgroundColor: colors.background }]}>
@@ -896,7 +897,7 @@ export default function DoctorDetailScreen() {
         </View>
       </View>
     </Modal>
-    </>
+    </AppWrapper>
   );
 }
 

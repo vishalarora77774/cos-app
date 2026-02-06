@@ -7,6 +7,7 @@ import { Card, Button, TextInput, Icon } from 'react-native-paper';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useProxies } from '@/hooks/use-proxies';
+import { AppWrapper } from '@/components/app-wrapper';
 
 export default function ProxyManagementScreen() {
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
@@ -119,18 +120,7 @@ export default function ProxyManagementScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <IconSymbol name="chevron.right" size={getScaledFontSize(24)} color={colors.text} style={{ transform: [{ rotate: '180deg' }] }} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
-          Proxy Management
-        </Text>
-        <View style={{ width: getScaledFontSize(24) }} />
-      </View>
-
+    <AppWrapper>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Description */}
         <Card style={[styles.infoCard, { backgroundColor: colors.background }]}>
@@ -219,7 +209,7 @@ export default function ProxyManagementScreen() {
       <Modal
         visible={showAddModal}
         transparent={true}
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowAddModal(false)}
       >
         <View style={styles.modalOverlay}>
@@ -373,31 +363,11 @@ export default function ProxyManagementScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </AppWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  backButton: {
-    padding: 4,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-  },
   scrollView: {
     flex: 1,
   },
@@ -495,13 +465,21 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   addModalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    width: '100%',
+    maxWidth: 500,
+    borderRadius: 20,
     paddingBottom: 32,
     maxHeight: '80%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   modalContent: {
     width: '100%',

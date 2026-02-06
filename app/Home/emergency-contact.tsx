@@ -2,10 +2,9 @@ import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { useEmergencyContact } from '@/hooks/use-emergency-contact';
-import { router } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
-import { Card, List } from 'react-native-paper';
+import { StyleSheet, Text, View, ScrollView } from 'react-native';
+import { Card } from 'react-native-paper';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 
 export default function EmergencyContactScreen() {
@@ -14,21 +13,14 @@ export default function EmergencyContactScreen() {
   const { emergencyContacts, isLoading } = useEmergencyContact();
 
   return (
-    <AppWrapper showHamburgerIcon={false}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <IconSymbol name="chevron.left" size={getScaledFontSize(24)} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
-          Emergency Contacts
-        </Text>
-        <View style={styles.backButton} />
-      </View>
-
+    <AppWrapper>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={[styles.title, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>
+            Emergency Contacts
+          </Text>
+        </View>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <Text style={[styles.loadingText, { color: colors.text }]}>Loading...</Text>
@@ -122,31 +114,19 @@ export default function EmergencyContactScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'center',
-  },
   content: {
     flex: 1,
   },
   contentContainer: {
     padding: 16,
+  },
+  titleSection: {
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,

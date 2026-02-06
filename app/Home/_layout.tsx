@@ -85,6 +85,20 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="doctor-detail"
+        options={{
+          title: 'Doctor Detail',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="proxy-management"
+        options={{
+          title: 'Proxy Management',
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
