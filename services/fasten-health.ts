@@ -341,8 +341,24 @@ function transformDiagnosticReport(report: FHIRDiagnosticReport, observations: M
     }
   }
   
-  // Get report name from code
-  const reportName = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+  // Get report name from code (prefer static LOINC mapping if available)
+  let reportName = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loincJson = require('../data/loinc-map.json');
+    if (loincJson && report.code?.coding) {
+      for (const c of report.code.coding) {
+        const code = (c as any).code;
+        if (code && loincJson[code]) {
+          const li = loincJson[code];
+          reportName = li.shortName || li.component || reportName;
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    // ignore when static map not present
+  }
   
   // Extract findings from observations
   const findings: string[] = [];
@@ -352,21 +368,40 @@ function transformDiagnosticReport(report: FHIRDiagnosticReport, observations: M
         const obsId = result.reference.split('/')[1];
         const observation = observations.get(obsId);
         if (observation) {
+          // Helper: try to get a LOINC label for an observation or component
+          const getLoincLabel = (obsOrComp: any) => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const loincJson = require('../data/loinc-map.json');
+              if (!loincJson) return undefined;
+              const codings = obsOrComp.code?.coding || obsOrComp.coding || [];
+              for (const coding of codings) {
+                const code = (coding as any).code;
+                if (code && loincJson[code]) {
+                  const li = loincJson[code];
+                  return li.shortName || li.component || undefined;
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+            return undefined;
+          };
           // Extract value from observation
           if (observation.valueQuantity) {
             const value = observation.valueQuantity.value;
             const unit = observation.valueQuantity.unit || '';
-            const codeText = observation.code?.text || observation.code?.coding?.[0]?.display || '';
+            const codeText = getLoincLabel(observation) || observation.code?.text || observation.code?.coding?.[0]?.display || '';
             if (value !== undefined) {
               findings.push(`${codeText}: ${value} ${unit}`.trim());
             }
           } else if (observation.valueString) {
-            const codeText = observation.code?.text || observation.code?.coding?.[0]?.display || '';
+            const codeText = getLoincLabel(observation) || observation.code?.text || observation.code?.coding?.[0]?.display || '';
             findings.push(`${codeText}: ${observation.valueString}`);
           } else if (observation.component) {
             // Handle component observations
             observation.component.forEach(comp => {
-              const compText = comp.code?.text || comp.code?.coding?.[0]?.display || '';
+              const compText = getLoincLabel(comp) || comp.code?.text || comp.code?.coding?.[0]?.display || '';
               if (comp.valueQuantity) {
                 const value = comp.valueQuantity.value;
                 const unit = comp.valueQuantity.unit || '';
@@ -644,8 +679,24 @@ function transformDiagnosticReportToReport(
     }
   }
   
-  // Get title from code
-  const title = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+  // Get title from code (prefer static LOINC mapping when available)
+  let title = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loincJson = require('../data/loinc-map.json');
+    if (loincJson && report.code?.coding) {
+      for (const c of report.code.coding) {
+        const code = (c as any).code;
+        if (code && loincJson[code]) {
+          const li = loincJson[code];
+          title = li.shortName || li.component || title;
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    // ignore - static map may not be present
+  }
   
   // Get provider from performer
   let provider = 'Unknown Provider';
@@ -1372,14 +1423,42 @@ export async function getProviderDiagnosesAndTreatmentPlans(practitionerId: stri
     const dateObj = new Date(date);
     const isActive = dateObj > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // Active if within last 90 days
     
-    const diagnosis = report.conclusionCode?.[0]?.text || 
-                     report.conclusionCode?.[0]?.coding?.[0]?.display || 
-                     report.code?.text || 
-                     'No diagnosis recorded';
+    let diagnosis = report.conclusionCode?.[0]?.text || 
+                    report.conclusionCode?.[0]?.coding?.[0]?.display || 
+                    report.code?.text || 
+                    'No diagnosis recorded';
     
-    const description = report.code?.text || 
-                       report.category?.[0]?.text || 
-                       'Treatment plan details';
+    let description = report.code?.text || 
+                      report.category?.[0]?.text || 
+                      'Treatment plan details';
+    
+    // Prefer static LOINC mapping labels when available to normalize diagnosis/description
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const loincJson = require('../data/loinc-map.json');
+      if (loincJson && report.code?.coding) {
+        for (const c of report.code.coding) {
+          const code = (c as any).code;
+          if (code && loincJson[code]) {
+            const li = loincJson[code];
+            // prefer shortName, then component, then property
+            const mappedLabel = li.shortName || li.component || li.property;
+            if (mappedLabel) {
+              // Use mapped label for diagnosis if diagnosis is missing or generic
+              if (!diagnosis || diagnosis === 'No diagnosis recorded') {
+                diagnosis = mappedLabel;
+              }
+              // Use mapped label as description if description is generic or equals raw code text
+              if (!description || description === 'Treatment plan details' || description === report.code?.text) {
+                description = mappedLabel;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore if static map not present
+    }
     
     // Get medications from medication statements (simplified - in real app would link by encounter)
     const reportMedications = medications
@@ -1490,10 +1569,30 @@ export async function getProviderProgressNotes(practitionerId: string): Promise<
       hour12: true 
     });
     
-    const note = report.code?.text || 
-                report.conclusionCode?.[0]?.text || 
-                report.category?.[0]?.text || 
-                'Progress note recorded';
+    let note = report.code?.text || 
+               report.conclusionCode?.[0]?.text || 
+               report.category?.[0]?.text || 
+               'Progress note recorded';
+    // Prefer static LOINC mapping label when present
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const loincJson = require('../data/loinc-map.json');
+      if (loincJson && report.code?.coding) {
+        for (const c of report.code.coding) {
+          const code = (c as any).code;
+          if (code && loincJson[code]) {
+            const li = loincJson[code];
+            const mapped = li.shortName || li.component || li.property;
+            if (mapped) {
+              note = mapped;
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
     
     return {
       id: report.id,

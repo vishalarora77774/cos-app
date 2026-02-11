@@ -1,5 +1,6 @@
 import { Database } from '@nozbe/watermelondb';
 import SQLiteAdapter from '@nozbe/watermelondb/adapters/sqlite';
+import { NativeModules } from 'react-native';
 
 import { schema } from './schema';
 import * as models from './models';
@@ -8,7 +9,7 @@ import migrations from './migrations';
 // Lazy database initialization for Expo compatibility
 let databaseInstance: Database | null = null;
 
-export function getDatabase(): Database {
+export function getDatabase(): Database | null {
   if (databaseInstance) {
     return databaseInstance;
   }
@@ -16,6 +17,14 @@ export function getDatabase(): Database {
   // For Expo, we use JSI mode with expo-sqlite for better performance
   // IMPORTANT: WatermelonDB requires a development build, NOT Expo Go
   // You cannot use Expo Go - you must create a development build
+  // If the native WatermelonDB DatabaseBridge isn't present, we're likely running
+  // inside Expo Go or an environment without native linking. Return null so UI
+  // code can gracefully fall back to mock/no-op behavior.
+  if (!NativeModules || !NativeModules.DatabaseBridge) {
+    console.warn('WatermelonDB native module not found (NativeModules.DatabaseBridge). Skipping DB initialization.');
+    return null;
+  }
+
   const adapter = new SQLiteAdapter({
     schema,
     migrations,

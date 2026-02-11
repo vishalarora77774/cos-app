@@ -509,7 +509,7 @@ interface FHIRDevice extends FHIRResource {
  * @param rawFhirData - Array of FHIR resources
  * @returns Processed health data structured by clinic and patient
  */
-export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedHealthData {
+export function processFastenHealthData(rawFhirData: FHIRResource[], loincMap?: Map<string, any>): ProcessedHealthData {
   // Separate resources by type
   const patients: FHIRPatient[] = [];
   const practitioners: FHIRPractitioner[] = [];
@@ -562,13 +562,14 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
   // Process providers with engagement counts
   const processedProviders = processProviders(practitioners, diagnosticReports, encounters);
 
-  // Process medical reports
+  // Process medical reports (pass LOINC map for enrichment when available)
   const processedReports = processMedicalReports(
     diagnosticReports,
     practitioners,
     encounters,
     processedPatients,
-    processedClinics
+    processedClinics,
+    loincMap
   );
 
   // Process appointments
@@ -608,7 +609,8 @@ export function processFastenHealthData(rawFhirData: FHIRResource[]): ProcessedH
     observations,
     conditions,
     devices,
-    processedPatients
+    processedPatients,
+    loincMap
   );
 
   return {
@@ -1055,6 +1057,7 @@ function processMedicalReports(
   encounters: FHIREncounter[],
   patients: ProcessedPatient[],
   clinics: ProcessedClinic[]
+  , loincMap?: Map<string, any>
 ): ProcessedMedicalReport[] {
   const practitionerMap = new Map(practitioners.map(p => [p.id, p]));
   const patientMap = new Map(patients.map(p => [p.id, p]));
@@ -1114,8 +1117,23 @@ function processMedicalReports(
         }
       }
 
-      // Get title
-      const title = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+      // Get title - prefer LOINC map shortName when available
+      let title = report.code?.text || report.code?.coding?.[0]?.display || 'Medical Report';
+      if (loincMap && report.code?.coding && report.code.coding.length > 0) {
+        for (const c of report.code.coding) {
+          const code = (c as any).code;
+          if (code && loincMap.has(code)) {
+            const li = loincMap.get(code) as any;
+            if (li && li.shortName) {
+              title = li.shortName;
+              break;
+            } else if (li && li.component) {
+              title = li.component;
+              break;
+            }
+          }
+        }
+      }
 
       // Get file info
       const fileForm = report.presentedForm?.[0];
@@ -1410,6 +1428,7 @@ function processHealthDetails(
   conditions: FHIRCondition[],
   devices: FHIRDevice[],
   patients: ProcessedPatient[]
+  , loincMap?: Map<string, any>
 ): ProcessedHealthDetails | null {
   if (patients.length === 0) {
     return null;
@@ -1426,34 +1445,51 @@ function processHealthDetails(
 
   // Process observations
   observations.forEach(obs => {
+    // Helper: attempt to lookup LOINC info for this observation if map is available
+    const getLoincInfoForObservation = (observation: FHIRObservation) => {
+      if (!loincMap || !observation.code || !observation.code.coding) return undefined;
+      for (const coding of observation.code.coding) {
+        const code = coding.code;
+        const system = (coding.system || '').toLowerCase();
+        if (!code) continue;
+        if (system.includes('loinc') || /^\d{1,6}-\d+$/.test(code)) {
+          const entry = loincMap.get(code);
+          if (entry) return entry;
+        }
+      }
+      return undefined;
+    };
+
+    const loincInfo = getLoincInfoForObservation(obs);
     const codeText = obs.code?.text?.toLowerCase() || '';
     const codeDisplay = obs.code?.coding?.[0]?.display?.toLowerCase() || '';
-    const combined = codeText + ' ' + codeDisplay;
+    const combined = codeText + ' ' + codeDisplay + ' ' + (loincInfo?.shortName || '') + ' ' + (loincInfo?.component || '');
 
     // Height
-    if ((combined.includes('height') || codeText.includes('height')) && obs.valueQuantity) {
+    if ((combined.includes('height') || codeText.includes('height') || (loincInfo && ((loincInfo.shortName || '').toLowerCase().includes('height') || (loincInfo.component || '').toLowerCase().includes('height')))) && obs.valueQuantity) {
       const value = obs.valueQuantity.value;
       const unit = obs.valueQuantity.unit || 'cm';
       height = `${value} ${unit}`;
     }
 
     // Weight
-    if ((combined.includes('weight') || codeText.includes('weight')) && obs.valueQuantity) {
+    if ((combined.includes('weight') || codeText.includes('weight') || (loincInfo && ((loincInfo.shortName || '').toLowerCase().includes('weight') || (loincInfo.component || '').toLowerCase().includes('weight')))) && obs.valueQuantity) {
       const value = obs.valueQuantity.value;
       const unit = obs.valueQuantity.unit || 'kg';
       weight = `${value} ${unit}`;
     }
 
     // Blood Pressure
-    if (combined.includes('blood pressure') || codeText.includes('blood pressure')) {
+    if (combined.includes('blood pressure') || codeText.includes('blood pressure') || (loincInfo && ((loincInfo.shortName || '').toLowerCase().includes('blood pressure') || (loincInfo.component || '').toLowerCase().includes('systolic') || (loincInfo.component || '').toLowerCase().includes('diastolic')))) {
       if (obs.component && obs.component.length > 0) {
         obs.component.forEach(comp => {
           const compText = comp.code?.text?.toLowerCase() || '';
           const compDisplay = comp.code?.coding?.[0]?.display?.toLowerCase() || '';
-          if (compText.includes('systolic') || compDisplay.includes('systolic')) {
+          const compCombined = compText + ' ' + compDisplay;
+          if (compText.includes('systolic') || compDisplay.includes('systolic') || compCombined.includes('systolic')) {
             bloodPressureSystolic = comp.valueQuantity?.value?.toString();
           }
-          if (compText.includes('diastolic') || compDisplay.includes('diastolic')) {
+          if (compText.includes('diastolic') || compDisplay.includes('diastolic') || compCombined.includes('diastolic')) {
             bloodPressureDiastolic = comp.valueQuantity?.value?.toString();
           }
         });
@@ -1464,7 +1500,7 @@ function processHealthDetails(
     }
 
     // Blood Type
-    if ((combined.includes('blood type') || combined.includes('abo') || combined.includes('rh')) && obs.valueString) {
+    if ((combined.includes('blood type') || combined.includes('abo') || combined.includes('rh') || (loincInfo && ((loincInfo.shortName || '').toLowerCase().includes('blood type') || (loincInfo.component || '').toLowerCase().includes('blood')))) && obs.valueString) {
       bloodType = obs.valueString;
     } else if ((combined.includes('blood type') || combined.includes('abo')) && obs.valueQuantity) {
       // Some systems store blood type as a coded value
@@ -1579,11 +1615,59 @@ function processEncounters(
 
 import { USE_MOCK_DATA, getFastenHealthDataName } from './fasten-health-config';
 import { categorizeProvider } from './provider-categorization';
+// NOTE: Node-specific modules (fs, path, etc.) and `pdf-parse` are not available
+// in the React Native runtime. The LOINC PDF processor is Node-only and should be
+// loaded dynamically when running in a Node environment (e.g. scripts or backend).
+// We avoid static imports of Node-only modules here so the Metro bundler won't fail.
 
 // Import JSON files at module level (required for React Native/Expo)
 // These must be at the top level, not inside async functions
 const mockFastenData = require('../data/mock-fasten-health-data.json');
 const originalFastenData = require('../data/fasten-health-data.json');
+
+/**
+ * Build a LOINC map from included LOINC PDF guide files that are checked into the repo.
+ * This helper attempts to dynamically load the Node-only `lib/loincPdfProcessor`
+ * module and use it to parse PDFs. If dynamic loading fails (e.g. when running
+ * inside the React Native simulator), this function returns an empty Map and logs
+ * a warning. Callers should handle an empty result.
+ *
+ * IMPORTANT: This function is intended for Node scripts or backend use. Do not
+ * call it from performance-sensitive UI code in the simulator.
+ */
+export async function buildLoincMapFromIncludedPdfs(): Promise<Map<string, any>> {
+  const pdfFiles = [
+    'LOINC-Mapping-Guide-Allergy-Version-1.0.pdf',
+    'LOINC-Mapping-Guide-Cell-Markers-Version-1.0.pdf',
+    'LOINC-Mapping-Guide-Chemistry-Version-1.0.pdf',
+    'LOINC-Mapping-Guide-Drug-and-Toxicology-Version-1.0.pdf',
+    'LOINC-Mapping-Guide-Hematology-Serology-Version-1.0.pdf',
+    'LOINC-Mapping-Guide-Molecular-Pathology-Version-1.0.pdf',
+    'GuideForUsingLoincMicrobiologyTerms1.1.pdf',
+  ];
+
+  try {
+    // Dynamic import to avoid bundler/static resolution of Node-only modules.
+    // This will succeed only in Node environments where fs/path/pdf-parse exist.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const loincModule = await import('../lib/loincPdfProcessor');
+
+    // Build absolute-ish paths relative to the repository root on Node.
+    // We avoid `path` import here to keep this file Metro-friendly.
+    const projectRoot = __dirname + '/..';
+    const pdfPaths = pdfFiles.map((f) => `${projectRoot}/${f}`);
+
+    const loincMap = await loincModule.buildLoincMapFromPdfFiles(pdfPaths);
+    return loincMap;
+  } catch (err) {
+    // Running in the simulator or an environment without Node FS modules.
+    // Return an empty map so the app can continue to run.
+    // Consumers should detect empty map and skip enrichment.
+    // eslint-disable-next-line no-console
+    console.warn('LOINC PDF processing is unavailable in this environment:', (err as Error).message);
+    return new Map();
+  }
+}
 
 /**
  * Processes data from a JSON file (for app usage)
@@ -1623,7 +1707,30 @@ export async function processFastenHealthDataFromFile(
     const rawData = Array.isArray(fastenData) ? fastenData : [fastenData];
     
     console.log(`✅ Processing ${rawData.length} FHIR resources from ${dataSourceName} data`);
-    return processFastenHealthData(rawData);
+    // First, try loading a static JSON LOINC map (preferred for RN).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    let loincMap: Map<string, any> = new Map();
+    try {
+      // static JSON mapping produced by scripts/generate-loinc-map.js
+      // This allows the RN app to load mappings without Node native modules.
+      // If file doesn't exist, the require will throw and we'll fall back.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const loincJson = require('../data/loinc-map.json');
+      if (loincJson && typeof loincJson === 'object') {
+        loincMap = new Map(Object.entries(loincJson));
+        console.log(`📘 Loaded static loinc-map.json (${loincMap.size} entries)`);
+      }
+    } catch (e) {
+      // ignore - will try dynamic PDF parsing next (Node-only)
+    }
+
+    if (!loincMap || loincMap.size === 0) {
+      // Attempt to build LOINC map from PDFs (Node-only). If unavailable, an empty Map will be returned.
+      // This exists as a fallback for backend scripts or when running Node.
+      loincMap = await buildLoincMapFromIncludedPdfs().catch(() => new Map());
+    }
+
+    return processFastenHealthData(rawData, loincMap);
   } catch (error) {
     console.error('Error processing Fasten Health data from file:', error);
     // Fallback to original data if mock data fails
