@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Switch } from 'react-native';
 import { Card, Icon, Button } from 'react-native-paper';
-import { router } from 'expo-router';
 import { Colors } from '@/constants/theme';
 import { useAccessibility } from '@/stores/accessibility-store';
 import { useHealthDetails } from '@/hooks/use-health-details';
+import { AppWrapper } from '@/components/app-wrapper';
 
 export default function HealthDetailsScreen() {
   const { settings, getScaledFontSize, getScaledFontWeight } = useAccessibility();
@@ -100,44 +100,30 @@ export default function HealthDetailsScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Icon source="arrow-left" size={getScaledFontSize(24)} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
-            Health Details
-          </Text>
-          <View style={styles.placeholder} />
-        </View>
+      <AppWrapper>
         <View style={styles.loadingContainer}>
           <Text style={[styles.loadingText, { color: colors.text, fontSize: getScaledFontSize(16), fontWeight: getScaledFontWeight(400) as any }]}>
             Loading health details...
           </Text>
         </View>
-      </View>
+      </AppWrapper>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Icon source="arrow-left" size={getScaledFontSize(24)} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: getScaledFontSize(20), fontWeight: getScaledFontWeight(600) as any }]}>
-          Health Details
-        </Text>
-        {!isEditing ? (
-          <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editButton}>
-            <Icon source="pencil" size={getScaledFontSize(24)} color={colors.tint} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.placeholder} />
-        )}
-      </View>
-
+    <AppWrapper>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={[styles.title, { color: colors.text, fontSize: getScaledFontSize(24), fontWeight: getScaledFontWeight(600) as any }]}>
+            Health Details
+          </Text>
+          {!isEditing && (
+            <TouchableOpacity onPress={() => setIsEditing(true)} style={styles.editButton}>
+              <Icon source="pencil" size={getScaledFontSize(24)} color={colors.tint} />
+            </TouchableOpacity>
+          )}
+        </View>
         {/* Height */}
         <Card style={[styles.card, { backgroundColor: colors.cardBackground }]}>
           <Card.Content>
@@ -339,35 +325,11 @@ export default function HealthDetailsScreen() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </AppWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  editButton: {
-    padding: 8,
-  },
-  placeholder: {
-    width: 40,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -380,6 +342,19 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  titleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingHorizontal: 4,
+  },
+  title: {
+    flex: 1,
+  },
+  editButton: {
+    padding: 8,
   },
   card: {
     marginBottom: 16,

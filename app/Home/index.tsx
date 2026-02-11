@@ -195,7 +195,7 @@ function PhoneCircleView({ providers, userImg, colors, getScaledFontSize, getSca
                   return;
                 }
                 if (!item.isManual) {
-                  router.push(`/(doctor-detail)?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
+                  router.push(`/Home/doctor-detail?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
                 }
               }}
             >
@@ -410,7 +410,7 @@ function TabletCircleView({ providers, userImg, colors, getScaledFontSize, getSc
                   return;
                 }
                 if (!item.isManual) {
-                  router.push(`/(doctor-detail)?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
+                  router.push(`/Home/doctor-detail?id=${encodeURIComponent(item.id)}&name=${encodeURIComponent(item.name)}&qualifications=${encodeURIComponent(item.qualifications || '')}&specialty=${encodeURIComponent(item.specialty || '')}`);
                 }
               }}
             >
@@ -575,7 +575,7 @@ function CircleProvidersListView({ providers, userImg, colors, getScaledFontSize
                 }
               ]}
               onPress={provider.isManual ? undefined : () => {
-                router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                router.push(`/Home/doctor-detail?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
               }}
               activeOpacity={provider.isManual ? 1 : 0.7}
             >
@@ -1593,7 +1593,7 @@ function ListView({ userImg, colors, getScaledFontSize, getScaledFontWeight, onI
                 }
               ]}
               onPress={provider.isManual ? undefined : () => {
-                router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                router.push(`/Home/doctor-detail?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
               }}
               activeOpacity={provider.isManual ? 1 : 0.7}
             >
@@ -1854,7 +1854,7 @@ function ProviderDetailsList({ colors, getScaledFontSize, getScaledFontWeight, o
             ]}
             onPress={() => {
               const specialty = (doc as any).specialty || '';
-              router.push(`/(doctor-detail)?id=${encodeURIComponent(doc.id)}&name=${encodeURIComponent(doc.name)}&qualifications=${encodeURIComponent(doc.qualifications || '')}&specialty=${encodeURIComponent(specialty)}`);
+              router.push(`/Home/doctor-detail?id=${encodeURIComponent(doc.id)}&name=${encodeURIComponent(doc.name)}&qualifications=${encodeURIComponent(doc.qualifications || '')}&specialty=${encodeURIComponent(specialty)}`);
             }}
             activeOpacity={0.7}
           >

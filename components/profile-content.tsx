@@ -127,7 +127,7 @@ export function ProfileContent({
               description={<Text style={[{ fontSize: getScaledFontSize(12), fontWeight: getScaledFontWeight(500) as any }]}>Manage your proxy access</Text>}
               left={(props) => <Icon {...props} source="account-supervisor" size={getScaledFontSize(40)} />}
               right={(props) => <Icon {...props} source="chevron-right" size={getScaledFontSize(40)} />}
-              onPress={() => router.push('/(proxy-management)')}
+              onPress={() => router.push('/Home/proxy-management')}
             />
           </Card>
 

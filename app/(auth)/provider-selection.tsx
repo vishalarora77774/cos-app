@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppWrapper } from '@/components/app-wrapper';
 import { Colors } from '@/constants/theme';
@@ -11,6 +12,7 @@ import { useAccessibility } from '@/stores/accessibility-store';
 export default function ProviderSelectionScreen() {
   const { settings, getScaledFontWeight, getScaledFontSize } = useAccessibility();
   const colors = Colors[settings.isDarkTheme ? 'dark' : 'light'];
+  const insets = useSafeAreaInsets();
 
   const handleEPICSignIn = () => {
     // TODO: Implement EPIC authentication
@@ -25,7 +27,13 @@ export default function ProviderSelectionScreen() {
   return (
     <AppWrapper showBellIcon={false} showLogo={false} showHamburgerIcon={false}>
       <ScrollView 
-        contentContainerStyle={[styles.scrollContainer, { backgroundColor: colors.background }]}
+        contentContainerStyle={[
+          styles.scrollContainer, 
+          { 
+            backgroundColor: colors.background,
+            paddingBottom: Math.max(40, insets.bottom + 40),
+          }
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.container, { padding: getScaledFontSize(24), gap: getScaledFontSize(24) }]}>
@@ -76,9 +84,9 @@ export default function ProviderSelectionScreen() {
                 contentStyle={[
                   styles.buttonContent,
                   { 
-                    height: Math.max(56, getScaledFontSize(16) * 1.5 + getScaledFontSize(16) * 2),
+                    minHeight: Math.max(56, getScaledFontSize(20) + getScaledFontSize(16) * 2),
                     paddingHorizontal: getScaledFontSize(24),
-                    paddingVertical: getScaledFontSize(12),
+                    paddingVertical: getScaledFontSize(16),
                   }
                 ]}
                 labelStyle={[
@@ -86,7 +94,8 @@ export default function ProviderSelectionScreen() {
                   { 
                     fontSize: getScaledFontSize(16), 
                     fontWeight: getScaledFontWeight(600) as any,
-                    lineHeight: getScaledFontSize(16) * 1.2,
+                    lineHeight: getScaledFontSize(20),
+                    paddingVertical: getScaledFontSize(4),
                   }
                 ]}
               >

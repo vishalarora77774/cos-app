@@ -739,7 +739,10 @@ export default function ModalScreen() {
                                     : (provider.qualifications || 'Healthcare Provider')}
                                   image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                                   onPress={provider.isManual ? undefined : () => {
-                                    router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                                    router.back();
+                                    setTimeout(() => {
+                                      router.push(`/Home/doctor-detail?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                                    }, 300);
                                   }}
                                   highlighted={isSelected}
                                   actionIconName={showAction ? (isSelected ? 'minus' : 'plus') : undefined}
@@ -806,7 +809,10 @@ export default function ModalScreen() {
                           qualifications={provider.qualifications || 'Healthcare Provider'}
                           image={doctorPhotos.get(provider.id) ? { uri: doctorPhotos.get(provider.id)! } : (provider.image || undefined)}
                           onPress={() => {
-                            router.push(`/(doctor-detail)?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                            router.back();
+                            setTimeout(() => {
+                              router.push(`/Home/doctor-detail?id=${encodeURIComponent(provider.id)}&name=${encodeURIComponent(provider.name)}&qualifications=${encodeURIComponent(provider.qualifications || '')}&specialty=${encodeURIComponent(provider.specialty || '')}`);
+                            }, 300);
                           }}
                           highlighted={isSelected}
                           actionIconName={showAction ? (isSelected ? 'minus' : 'plus') : undefined}

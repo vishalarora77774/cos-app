@@ -35,6 +35,7 @@ const MAPPING = {
   'sparkles': 'auto-awesome',
   'slider.horizontal.3': 'tune',
   'slider.vertical.3': 'equalizer',
+  'tray.fill': 'inbox',
 } as IconMapping;
 
 /**

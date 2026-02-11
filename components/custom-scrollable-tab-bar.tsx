@@ -34,7 +34,7 @@ export function CustomScrollableTabBar({ state, descriptors, navigation }: Botto
       return false;
     }
     // Also hide specific routes explicitly as a fallback
-    if (route.name === 'today-schedule' || route.name === 'profile' || route.name === 'connected-ehrs' || route.name === 'emergency-contact' || route.name === 'health-details') {
+    if (route.name === 'today-schedule' || route.name === 'profile' || route.name === 'connected-ehrs' || route.name === 'emergency-contact' || route.name === 'health-details' || route.name === 'doctor-detail' || route.name === 'proxy-management') {
       return false;
     }
     return true;

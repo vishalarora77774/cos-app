@@ -22,6 +22,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="inbox"
+        options={{
+          title: 'Inbox',
+          tabBarIcon: ({ color }) => <IconSymbol size={getScaledFontSize(24)} name="tray.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="appointments"
         options={{
           title: 'Appointments',
@@ -75,6 +82,20 @@ export default function TabLayout() {
         name="health-details"
         options={{
           title: 'Health Details',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="doctor-detail"
+        options={{
+          title: 'Doctor Detail',
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="proxy-management"
+        options={{
+          title: 'Proxy Management',
           href: null,
         }}
       />
